@@ -66,12 +66,13 @@ class OpenVPN {
       {String? providerBundleIdentifier,
       String? localizedDescription,
       String? groupIdentifier}) async {
-    if (Platform.isIOS)
+    if (Platform.isIOS) {
       assert(
           groupIdentifier != null &&
               providerBundleIdentifier != null &&
               localizedDescription != null,
           "These values are required for ios.");
+    }
     onVpnStatusChanged?.call(VpnStatus.empty());
     _initialized = true;
     _initializeListener();
@@ -159,8 +160,9 @@ class OpenVPN {
   }
 
   static VPNStage _strToStage(String stage) {
-    if (stage.trim().isEmpty || stage.trim() == "idle")
+    if (stage.trim().isEmpty || stage.trim() == "idle") {
       return VPNStage.disconnected;
+    }
     var indexStage = VPNStage.values.indexWhere((element) =>
         element.name.trim().toLowerCase() ==
         stage.toString().trim().toLowerCase());
@@ -176,14 +178,16 @@ class OpenVPN {
         if (_vpnStatusTimer != null) return;
         _vpnStatusTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
           _channelControl.invokeMethod("status").then((data) {
-            if (data == null)
+            if (data == null) {
               return onVpnStatusChanged?.call(VpnStatus.empty());
+            }
 
             if (Platform.isIOS) {
               var splitted = data.split("_");
               var connectedOn = DateTime.tryParse(splitted[0]);
-              if (connectedOn == null)
+              if (connectedOn == null) {
                 return onVpnStatusChanged?.call(VpnStatus.empty());
+              }
 
               onVpnStatusChanged?.call(VpnStatus(
                 duration:
@@ -197,8 +201,9 @@ class OpenVPN {
               var connectedOn =
                   DateTime.tryParse(value["connected_on"].toString()) ??
                       _tempDateTime;
-              if (connectedOn == null)
+              if (connectedOn == null) {
                 return onVpnStatusChanged?.call(VpnStatus.empty());
+              }
 
               String byteIn =
                   value["byte_in"] != null ? value["byte_in"].toString() : "0";
