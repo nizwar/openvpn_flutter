@@ -35,5 +35,5 @@ android {
 }
 
 dependencies {
-    implementation project(':vpnLib')
+    implementation fileTree(dir: 'vpnLib', include: ['*.aar', '*.jar'], exclude: [])
 }
