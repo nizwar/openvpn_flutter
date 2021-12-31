@@ -1,4 +1,3 @@
-# OPENVPN FLUTTER
 Connect OpenVPN service with Flutter, Issues and PRs are very welcome!
 
 ## Installation
@@ -7,7 +6,7 @@ Add this to your package's pubspec.yaml file:
 
 ```dart
 dependencies:
-  openvpn_flutter: ^0.0.1
+  openvpn_flutter: ^1.0.0+1
 
 ```
 
@@ -90,10 +89,10 @@ Before start, you have to initialize the OpenVPN plugin.
 
 
 # Publishing to Play Store and App Store
-## Android
+### Android
 1. You can use appbundle to publish the app
 
-## iOS
+### iOS
 1. View [Apple Guidelines](https://developer.apple.com/app-store/review/guidelines/#vpn-apps) Relating to VPN
 2. This plugin DOES use Encryption BUT, It uses Exempt Encryptions
 
