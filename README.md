@@ -6,7 +6,7 @@ Add this to your package's pubspec.yaml file:
 
 ```dart
 dependencies:
-  openvpn_flutter: ^1.0.1
+  openvpn_flutter: ^1.0.1+1
 
 ```
 

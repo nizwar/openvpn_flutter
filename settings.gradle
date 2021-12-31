@@ -1,5 +1,0 @@
-include ':openvpn_flutter'
-include ':vpnLib'
-
-project(':openvpn_flutter').projectDir = file('android')
-project(':vpnLib').projectDir = file('android/vpnLib')
