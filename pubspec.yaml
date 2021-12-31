@@ -1,6 +1,6 @@
 name: openvpn_flutter
-description: Connect OpenVPN with Flutter
-version: 0.0.1
+description: Connect OpenVPN service with Flutter
+version: 1.0.0
 homepage: https://github.com/nizwar
 
 environment:
