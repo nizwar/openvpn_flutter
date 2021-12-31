@@ -1,35 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="id.laskarmedia.openvpn_flutter">
-
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <application>
-        <activity android:name=".OpenVPNFlutterPlugin"/>
-        <service
-            android:name="de.blinkt.openvpn.core.OpenVPNService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.net.VpnService"/>
-            </intent-filter>
-        </service>
-
-        <activity
-            android:name="de.blinkt.openvpn.LaunchVPN"
-            android:excludeFromRecents="true"
-            android:label="@string/vpn_launch_title"
-            android:theme="@android:style/Theme.DeviceDefault.Light.Panel"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-
-                <category android:name="android.intent.category.DEFAULT"/>
-            </intent-filter>
-        </activity>
-        <activity
-            android:name="de.blinkt.openvpn.DisconnectVPNActivity"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:taskAffinity=".DisconnectVPN"
-            android:theme="@style/blinkt.dialog" />
-    </application>
 </manifest>
