@@ -1,3 +1,4 @@
+///To store datas of VPN Connection's status detail
 class VpnStatus {
   VpnStatus({
     this.duration,
@@ -6,18 +7,19 @@ class VpnStatus {
     this.byteOut,
   });
 
-  String? duration;
-  String? lastPacketReceive;
-  String? byteIn;
-  String? byteOut;
+  ///Duration of vpn usage
+  final String? duration;
 
-  factory VpnStatus.fromJson(Map<String, dynamic> json) => VpnStatus(
-        duration: json["duration"],
-        lastPacketReceive: json["last_packet_receive"],
-        byteIn: json["byte_in"],
-        byteOut: json["byte_out"],
-      );
+  ///Last packet received by connection
+  final String? lastPacketReceive;
 
+  ///Download byte usages
+  final String? byteIn;
+
+  ///Upload byte usages
+  final String? byteOut;
+
+  /// VPNStatus as empty data
   factory VpnStatus.empty() => VpnStatus(
         duration: "00:00:00",
         lastPacketReceive: "0",
@@ -25,6 +27,7 @@ class VpnStatus {
         byteOut: "0",
       );
 
+  ///Convert to JSON
   Map<String, dynamic> toJson() => {
         "duration": duration,
         "last_packet_receive": lastPacketReceive,

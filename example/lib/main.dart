@@ -26,7 +26,7 @@ class _MyAppState extends State<MyApp> {
           status = data;
         });
       },
-      onVpnStageChanged: (data) {
+      onVpnStageChanged: (data, raw) {
         setState(() {
           stage = data;
         });
