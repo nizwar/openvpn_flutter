@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/services.dart';
-import '../model/vpn_status.dart';
+import 'model/vpn_status.dart';
 
 enum VPNStage {
   prepare,
@@ -50,6 +50,8 @@ class OpenVPN {
   final Function(VpnStatus? data)? onVpnStatusChanged;
   final Function(VPNStage data)? onVpnStageChanged;
 
+  /// onVpnStatusChanged is a listener to see vpn status detail
+  /// onVpnStageChanged is a listener to see what stage the connection was
   OpenVPN({this.onVpnStatusChanged, this.onVpnStageChanged});
 
   ///This function should be called before any usage of OpenVPN
@@ -174,7 +176,6 @@ class OpenVPN {
     _vpnStageSnapshot().listen((event) {
       onVpnStageChanged?.call(event);
       if (event != VPNStage.disconnected) {
-        ///Make sure to get status on connected
         if (_vpnStatusTimer != null) return;
         _vpnStatusTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
           _channelControl.invokeMethod("status").then((data) {

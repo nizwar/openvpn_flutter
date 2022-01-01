@@ -1,27 +1,10 @@
 Connect OpenVPN service with Flutter, Issues and PRs are very welcome!
 
-## Installation
-
-Add this to your package's pubspec.yaml file:
-
-```dart
-dependencies:
-  openvpn_flutter: ^1.0.1+1
-
-```
-
-Run the command and you're ready to go
- 
-
-```dart
-$ flutter pub get
-```
- 
-## Android Installation
-No need to setup anything on android 🤭
+## Android Setup
+There is no special setup in android 🤭
 
 
-## iOS Installation
+## iOS Setup
 
 ### <b>1. Add Capabillity</b>
 Add 2 capabillity on Runner's Target, <b>App Groups</b> and <b>Network Extensions</b>, Look at the image below to get clearer details
