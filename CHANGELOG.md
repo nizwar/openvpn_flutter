@@ -1,3 +1,7 @@
+## 1.1.1
+* Fix iOS by Adding PacketTunnelProvider
+* More detail at instructions
+* Fix VPNStatus not updated after disconnected
 ## 1.1.0
 * Add 'raw' on onVpnStageChanged
 * Add details on doc
