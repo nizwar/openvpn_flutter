@@ -87,9 +87,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 
             }
         })
-        //
-        //        registrar.addMethodCallDelegate(instance, channel: channel)
-        //        registrar.addMethodCallDelegate(instance, channel: vpnControlM)
     }
     
     

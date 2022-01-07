@@ -32,17 +32,12 @@ class _MyAppState extends State<MyApp> {
         });
       },
     );
-    engine.initialize(
-        groupIdentifier: "group.com.laskarmedia.vpn",
-        providerBundleIdentifier:
-            "id.laskarmedia.openvpnFlutterExample.VPNExtension",
-        localizedDescription: "VPN by Nizwar");
+    engine.initialize(groupIdentifier: "group.com.laskarmedia.vpn", providerBundleIdentifier: "id.laskarmedia.openvpnFlutterExample.VPNExtension", localizedDescription: "VPN by Nizwar");
     super.initState();
   }
 
   Future<void> initPlatformState() async {
-    engine.connect(config, "USA",
-        username: defaultVpnUsername, password: defaultVpnPassword);
+    engine.connect(config, "USA", username: defaultVpnUsername, password: defaultVpnPassword);
     if (!mounted) return;
   }
 
@@ -85,7 +80,7 @@ const String defaultVpnPassword = "";
 String config = """
 dev tun
 proto udp
-remote public-vpn-209.opengw.net 1195
+remote public-vpn-143.opengw.net 1195
 ;http-proxy-retry
 ;http-proxy [proxy server] [proxy port]
 cipher AES-128-CBC
@@ -97,6 +92,7 @@ persist-tun
 client
 verb 3
 #auth-user-pass
+
 <ca>
 -----BEGIN CERTIFICATE-----
 MIIF3jCCA8agAwIBAgIQAf1tMPyjylGoG7xkDjUDLTANBgkqhkiG9w0BAQwFADCB
@@ -132,6 +128,7 @@ VXyNWQKV3WKdwrnuWih0hKWbt5DHDAff9Yk2dDLWKMGwsAvgnEzDHNb842m1R0aB
 L6KCq9NjRHDEjf8tM7qtj3u1cIiuPhnPQCjY/MiQu12ZIvVS5ljFH4gxQ+6IHdfG
 jjxDah2nGN59PRbxYvnKkKj9
 -----END CERTIFICATE-----
+
 </ca>
 
 <cert>
@@ -152,6 +149,7 @@ UBHhllOHIzvDhHFbaovALBQceeBzdkQxsKQESKmQmR832950UCovoyRB61UyAV7h
 Fku7dGavURO5SVxMn/sL6En5D+oSeXkadHpDs+Airym2YHh15h0+jPSOoR6yiVp/
 6zZeZkrN43kuS73KpKDFjfFPh8t4r1gOIjttkNcQqBccusnplQ7HJpsk
 -----END CERTIFICATE-----
+
 </cert>
 
 <key>
@@ -182,5 +180,6 @@ va8q4QKBgQCEhLVeUfdwKvkZ94g/GFz731Z2hrdVhgMZaU/u6t0V95+YezPNCQZB
 wmE9Mmlbq1emDeROivjCfoGhR3kZXW1pTKlLh6ZMUQUOpptdXva8XxfoqQwa3enA
 M7muBbF0XN7VO80iJPv+PmIZdEIAkpwKfi201YB+BafCIuGxIF50Vg==
 -----END RSA PRIVATE KEY-----
+
 </key>
 """;

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		27943ADCF203914DB1ED7EDB /* Pods_VPNExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42DF978FD322A8300CDC4355 /* Pods_VPNExtension.framework */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		414F810E277EDF1800823C7F /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 414F810D277EDF1800823C7F /* NetworkExtension.framework */; };
 		414F8127277F5FE900823C7F /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 414F810D277EDF1800823C7F /* NetworkExtension.framework */; };
@@ -93,6 +94,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				414F8127277F5FE900823C7F /* NetworkExtension.framework in Frameworks */,
+				27943ADCF203914DB1ED7EDB /* Pods_VPNExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,6 +209,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 414F8130277F5FE900823C7F /* Build configuration list for PBXNativeTarget "VPNExtension" */;
 			buildPhases = (
+				3F480C1A61F117F06096298A /* [CP] Check Pods Manifest.lock */,
 				414F8122277F5FE900823C7F /* Sources */,
 				414F8123277F5FE900823C7F /* Frameworks */,
 				414F8124277F5FE900823C7F /* Resources */,
@@ -339,6 +342,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+		};
+		3F480C1A61F117F06096298A /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-VPNExtension-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -497,6 +522,7 @@
 		};
 		414F8131277F5FE900823C7F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 339DB5C3D6EE52DC8A844AC7 /* Pods-VPNExtension.debug.xcconfig */;
 			buildSettings = {
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
@@ -535,6 +561,7 @@
 		};
 		414F8132277F5FE900823C7F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 02A5452F38927BB2143A7398 /* Pods-VPNExtension.release.xcconfig */;
 			buildSettings = {
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
@@ -570,6 +597,7 @@
 		};
 		414F8133277F5FE900823C7F /* Profile */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 160186CEBA8DB4239E3F19F4 /* Pods-VPNExtension.profile.xcconfig */;
 			buildSettings = {
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";

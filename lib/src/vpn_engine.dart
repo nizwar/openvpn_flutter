@@ -196,58 +196,67 @@ class OpenVPN {
       var vpnStage = _strToStage(event);
       onVpnStageChanged?.call(vpnStage, event);
       if (vpnStage != VPNStage.disconnected) {
-        if (_vpnStatusTimer != null) return;
-        _vpnStatusTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
-          _channelControl.invokeMethod("status").then((data) {
-            if (data == null) {
-              return onVpnStatusChanged?.call(VpnStatus.empty());
-            }
-
-            if (Platform.isIOS) {
-              var splitted = data.split("_");
-              var connectedOn = DateTime.tryParse(splitted[0]);
-              if (connectedOn == null) {
-                return onVpnStatusChanged?.call(VpnStatus.empty());
-              }
-
-              onVpnStatusChanged?.call(VpnStatus(
-                duration:
-                    _duration(DateTime.now().difference(connectedOn).abs()),
-                byteIn: splitted[2],
-                byteOut: splitted[3],
-                lastPacketReceive: splitted[1],
-              ));
-            } else {
-              var value = jsonDecode(data);
-              var connectedOn =
-                  DateTime.tryParse(value["connected_on"].toString()) ??
-                      _tempDateTime;
-              if (connectedOn == null) {
-                return onVpnStatusChanged?.call(VpnStatus.empty());
-              }
-
-              String byteIn =
-                  value["byte_in"] != null ? value["byte_in"].toString() : "0";
-              String byteOut = value["byte_out"] != null
-                  ? value["byte_out"].toString()
-                  : "0";
-
-              if (byteIn.trim().isEmpty) byteIn = "0";
-              if (byteOut.trim().isEmpty) byteOut = "0";
-
-              onVpnStatusChanged?.call(VpnStatus(
-                duration:
-                    _duration(DateTime.now().difference(connectedOn).abs()),
-                byteIn: byteIn,
-                byteOut: byteOut,
-                lastPacketReceive: value["last_packet_receive"],
-              ));
-            }
-          });
-        });
+        if (Platform.isAndroid) {
+          _createTimer();
+        } else if (Platform.isIOS && vpnStage == VPNStage.connected) {
+          _createTimer();
+        }
       } else {
         _vpnStatusTimer?.cancel();
       }
+    });
+  }
+
+  ///Create timer to invoke status
+  void _createTimer() {
+    if (_vpnStatusTimer != null) {
+      _vpnStatusTimer!.cancel();
+      _vpnStatusTimer = null;
+    }
+    _vpnStatusTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+      _channelControl.invokeMethod("status").then((data) {
+        if (data == null) {
+          return onVpnStatusChanged?.call(VpnStatus.empty());
+        }
+
+        if (Platform.isIOS) {
+          var splitted = data.split("_");
+          var connectedOn = DateTime.tryParse(splitted[0]);
+          if (connectedOn == null) {
+            return onVpnStatusChanged?.call(VpnStatus.empty());
+          }
+
+          onVpnStatusChanged?.call(VpnStatus(
+            duration: _duration(DateTime.now().difference(connectedOn).abs()),
+            byteIn: splitted[2],
+            byteOut: splitted[3],
+            lastPacketReceive: splitted[1],
+          ));
+        } else {
+          var value = jsonDecode(data);
+          var connectedOn =
+              DateTime.tryParse(value["connected_on"].toString()) ??
+                  _tempDateTime;
+          if (connectedOn == null) {
+            return onVpnStatusChanged?.call(VpnStatus.empty());
+          }
+
+          String byteIn =
+              value["byte_in"] != null ? value["byte_in"].toString() : "0";
+          String byteOut =
+              value["byte_out"] != null ? value["byte_out"].toString() : "0";
+
+          if (byteIn.trim().isEmpty) byteIn = "0";
+          if (byteOut.trim().isEmpty) byteOut = "0";
+
+          onVpnStatusChanged?.call(VpnStatus(
+            duration: _duration(DateTime.now().difference(connectedOn).abs()),
+            byteIn: byteIn,
+            byteOut: byteOut,
+            lastPacketReceive: value["last_packet_receive"],
+          ));
+        }
+      });
     });
   }
 }
