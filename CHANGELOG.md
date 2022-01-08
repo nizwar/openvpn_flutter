@@ -1,3 +1,5 @@
+## 1.1.1+1
+* Update readme, more detail about iOS setup
 ## 1.1.1
 * Fix iOS by Adding PacketTunnelProvider
 * More detail at instructions
