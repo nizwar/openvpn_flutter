@@ -32,12 +32,17 @@ class _MyAppState extends State<MyApp> {
         });
       },
     );
-    engine.initialize(groupIdentifier: "group.com.laskarmedia.vpn", providerBundleIdentifier: "id.laskarmedia.openvpnFlutterExample.VPNExtension", localizedDescription: "VPN by Nizwar");
+    engine.initialize(
+        groupIdentifier: "group.com.laskarmedia.vpn",
+        providerBundleIdentifier:
+            "id.laskarmedia.openvpnFlutterExample.VPNExtension",
+        localizedDescription: "VPN by Nizwar");
     super.initState();
   }
 
   Future<void> initPlatformState() async {
-    engine.connect(config, "USA", username: defaultVpnUsername, password: defaultVpnPassword);
+    engine.connect(config, "USA",
+        username: defaultVpnUsername, password: defaultVpnPassword);
     if (!mounted) return;
   }
 
