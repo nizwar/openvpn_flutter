@@ -57,7 +57,7 @@ class _MyAppState extends State<MyApp> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(stage?.name ?? VPNStage.disconnected.name),
+              Text(stage?.toString() ?? VPNStage.disconnected.toString()),
               Text(status?.toJson().toString() ?? ""),
               TextButton(
                 child: const Text("Start"),

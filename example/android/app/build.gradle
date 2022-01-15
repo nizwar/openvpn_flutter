@@ -25,26 +25,23 @@ apply plugin: 'com.android.application'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 31
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
-    defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+    defaultConfig { 
         applicationId "id.laskarmedia.openvpn_flutter_example"
-        minSdkVersion flutter.minSdkVersion
-        targetSdkVersion 30
+        minSdkVersion 16
+        targetSdkVersion 31
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig signingConfigs.debug
         }
     }
@@ -55,9 +52,9 @@ flutter {
 }
 
 dependencies{
-    implementation('androidx.work:work-runtime') {
-        version {
-            strictly '2.6.0'
-        }
-    }
+//    implementation('androidx.work:work-runtime') {
+//        version {
+//            strictly '2.6.0'
+//        }
+//    }
 }

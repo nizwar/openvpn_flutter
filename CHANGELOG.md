@@ -1,3 +1,6 @@
+## 1.1.2
+* Fix exported errors on SDK 31
+* PendingIntent errors fixes
 ## 1.1.1+1
 * Update readme, more detail about iOS setup
 ## 1.1.1
@@ -10,7 +13,6 @@
 * Fix duration still going on failed to connect
 ## 1.0.1+2
 * Solving scores
-
 ## 1.0.1+1
 * iOS Support
 * Android Support

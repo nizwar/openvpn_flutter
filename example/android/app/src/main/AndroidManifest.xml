@@ -2,7 +2,6 @@
     package="id.laskarmedia.openvpn_flutter_example">
    <application
         android:label="openvpn_flutter_example"
-        android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

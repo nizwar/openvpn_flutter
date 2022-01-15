@@ -28,6 +28,8 @@ enum VPNStage {
   udp_connect,
 // ignore: constant_identifier_names
   assign_ip,
+  resolve,
+  exiting,
   unknown
 }
 
@@ -183,9 +185,11 @@ class OpenVPN {
     if (stage == null || stage.trim().isEmpty || stage.trim() == "idle") {
       return VPNStage.disconnected;
     }
-    var indexStage = VPNStage.values.indexWhere((element) =>
-        element.name.trim().toLowerCase() ==
-        stage.toString().trim().toLowerCase());
+    var indexStage = VPNStage.values.indexWhere((element) => element
+        .toString()
+        .trim()
+        .toLowerCase()
+        .contains(stage.toString().trim().toLowerCase()));
     if (indexStage >= 0) return VPNStage.values[indexStage];
     return VPNStage.unknown;
   }
