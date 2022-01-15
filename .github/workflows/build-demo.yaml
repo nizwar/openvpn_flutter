@@ -1,0 +1,24 @@
+name: Openvpn_flutter
+
+on: push
+    
+jobs:
+  build:
+    name: Build APK
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-java@v1
+      with:
+        java-version: '12.x'
+    - uses: subosito/flutter-action@v1
+      with:
+        flutter-version: '2.5.3'
+    - run: flutter pub get
+    - run: flutter build apk --release --split-per-abi
+    - name: Release apks
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "build/app/outputs/apk/release/*.apk"
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: v1.0.${{github.run_number}}
