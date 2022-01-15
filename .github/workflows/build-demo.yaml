@@ -15,8 +15,7 @@ jobs:
       with:
         flutter-version: '2.5.3'
     - run: flutter pub get
-    - run: cd example
-    - run: flutter build apk --release --split-per-abi
+    - run: cd example && flutter build apk --release --split-per-abi
     - name: Release apks
       uses: ncipollo/release-action@v1
       with:
