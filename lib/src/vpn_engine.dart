@@ -145,6 +145,13 @@ class OpenVPN {
     return _strToStage(stage ?? "disconnected");
   }
 
+  ///Request android permission (Return true if already granted)
+  Future<bool> requestPermissionAndroid() async {
+    return _channelControl
+        .invokeMethod("request_permission")
+        .then((value) => value ?? false);
+  }
+
   ///Sometimes config script has too many Remotes, it cause ANR in several devices,
   ///This happened because the plugin check every remote and somehow affected the UI to freeze
   ///

@@ -1,3 +1,6 @@
+## 1.1.3
+* Add permission request for android ```requestPermissionAndroid()``` #5
+* Continue the connection after user grant vpn connection #8
 ## 1.1.2
 * Fix exported errors on SDK 31
 * PendingIntent errors fixes

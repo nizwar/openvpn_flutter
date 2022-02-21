@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -18,6 +20,7 @@ class _MyAppState extends State<MyApp> {
   late OpenVPN engine;
   VpnStatus? status;
   VPNStage? stage;
+  bool _granted = false;
   @override
   void initState() {
     engine = OpenVPN(
@@ -71,6 +74,17 @@ class _MyAppState extends State<MyApp> {
                   engine.disconnect();
                 },
               ),
+              if (Platform.isAndroid)
+                TextButton(
+                  child: Text(_granted ? "Granted" : "Request Permission"),
+                  onPressed: () {
+                    engine.requestPermissionAndroid().then((value) {
+                      setState(() {
+                        _granted = value;
+                      });
+                    });
+                  },
+                ),
             ],
           ),
         ),
@@ -82,22 +96,20 @@ class _MyAppState extends State<MyApp> {
 const String defaultVpnUsername = "";
 const String defaultVpnPassword = "";
 
-String config = """
-dev tun
-proto udp
-remote public-vpn-143.opengw.net 1195
+String config = """ 
+dev tun 
+proto tcp 
+remote public-vpn-173.opengw.net 443 
 ;http-proxy-retry
-;http-proxy [proxy server] [proxy port]
+;http-proxy [proxy server] [proxy port] 
 cipher AES-128-CBC
-auth SHA1
+auth SHA1 
 resolv-retry infinite
 nobind
 persist-key
 persist-tun
 client
-verb 3
-#auth-user-pass
-
+verb 3 
 <ca>
 -----BEGIN CERTIFICATE-----
 MIIF3jCCA8agAwIBAgIQAf1tMPyjylGoG7xkDjUDLTANBgkqhkiG9w0BAQwFADCB
@@ -135,7 +147,7 @@ jjxDah2nGN59PRbxYvnKkKj9
 -----END CERTIFICATE-----
 
 </ca>
-
+ 
 <cert>
 -----BEGIN CERTIFICATE-----
 MIICxjCCAa4CAQAwDQYJKoZIhvcNAQEFBQAwKTEaMBgGA1UEAxMRVlBOR2F0ZUNs
@@ -187,4 +199,6 @@ M7muBbF0XN7VO80iJPv+PmIZdEIAkpwKfi201YB+BafCIuGxIF50Vg==
 -----END RSA PRIVATE KEY-----
 
 </key>
+
+
 """;

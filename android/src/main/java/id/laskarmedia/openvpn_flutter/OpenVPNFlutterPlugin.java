@@ -1,7 +1,10 @@
 package id.laskarmedia.openvpn_flutter;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.net.VpnService;
 
 import androidx.annotation.NonNull;
 
@@ -23,21 +26,29 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware {
 
     private MethodChannel vpnControlMethod;
     private EventChannel vpnStageEvent;
-//    private EventChannel vpnStatusEvent;
+    //    private EventChannel vpnStatusEvent;
     private EventChannel.EventSink vpnStageSink;
 //    private EventChannel.EventSink vpnStatusSink;
 
     private static final String EVENT_CHANNEL_VPN_STAGE = "id.laskarmedia.openvpn_flutter/vpnstage";
-//    private static final String EVENT_CHANNEL_VPN_STATUS = "id.laskarmedia.openvpn_flutter/vpnstatus";
+    //    private static final String EVENT_CHANNEL_VPN_STATUS = "id.laskarmedia.openvpn_flutter/vpnstatus";
     private static final String METHOD_CHANNEL_VPN_CONTROL = "id.laskarmedia.openvpn_flutter/vpncontrol";
 
-    private String config = "", username = "", password = "", name = "";
+    private static String config = "", username = "", password = "", name = "";
 
-    private ArrayList<String> bypassPackages;
-    private VPNHelper vpnHelper;
+    private static ArrayList<String> bypassPackages;
+    @SuppressLint("StaticFieldLeak")
+    private static VPNHelper vpnHelper;
     private Activity activity;
 
     Context mContext;
+
+
+    public static void connectWhileGranted(boolean granted) {
+        if (granted) {
+            vpnHelper.startVPN(config, username, password, name, bypassPackages);
+        }
+    }
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
@@ -57,6 +68,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware {
         });
 
         vpnControlMethod.setMethodCallHandler((call, result) -> {
+
             switch (call.method) {
                 case "status":
                     if (vpnHelper == null) {
@@ -103,6 +115,12 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware {
                         result.error("-2", "OpenVPN Config is required", "");
                         return;
                     }
+
+                    final Intent permission = VpnService.prepare(activity);
+                    if (permission != null) {
+                        activity.startActivityForResult(permission, 24);
+                        return;
+                    }
                     vpnHelper.startVPN(config, username, password, name, bypassPackages);
                     break;
                 case "stage":
@@ -111,6 +129,15 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware {
                         return;
                     }
                     result.success(updateVPNStages());
+                    break;
+                case "request_permission":
+                    final Intent request = VpnService.prepare(activity);
+                    if (request != null) {
+                        activity.startActivityForResult(request, 24);
+                        result.success(false);
+                        return;
+                    }
+                    result.success(true);
                     break;
 
                 default:
