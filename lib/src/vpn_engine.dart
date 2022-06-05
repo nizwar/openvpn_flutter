@@ -82,10 +82,13 @@ class OpenVPN {
   ///
   ///
   ///Will return latest VPNStage
-  Future<VPNStage> initialize(
-      {String? providerBundleIdentifier,
-      String? localizedDescription,
-      String? groupIdentifier}) async {
+  Future<void> initialize({
+    String? providerBundleIdentifier,
+    String? localizedDescription,
+    String? groupIdentifier,
+    Function(VpnStatus status)? lastStatus,
+    Function(VPNStage status)? lastStage,
+  }) async {
     if (Platform.isIOS) {
       assert(
           groupIdentifier != null &&
@@ -101,7 +104,8 @@ class OpenVPN {
       "providerBundleIdentifier": providerBundleIdentifier,
       "localizedDescription": localizedDescription,
     }).then((value) {
-      return stage();
+      status().then((value) => lastStatus?.call(value));
+      stage().then((value) => lastStage?.call(value));
     });
   }
 
@@ -140,9 +144,59 @@ class OpenVPN {
       stage().then((value) => value == VPNStage.connected);
 
   ///Get latest connection stage
-  static Future<VPNStage> stage() async {
+  Future<VPNStage> stage() async {
     String? stage = await _channelControl.invokeMethod("stage");
     return _strToStage(stage ?? "disconnected");
+  }
+
+  ///Get latest connection status
+  Future<VpnStatus> status() {
+    //Have to check if user already connected to get real data
+    return stage().then((value) async {
+      var status = VpnStatus.empty();
+      if (value == VPNStage.connected) {
+        status = await _channelControl.invokeMethod("status").then((value) {
+          if (value == null) return VpnStatus.empty();
+
+          if (Platform.isIOS) {
+            var splitted = value.split("_");
+            var connectedOn = DateTime.tryParse(splitted[0]);
+            if (connectedOn == null) return VpnStatus.empty();
+            return VpnStatus(
+              connectedOn: connectedOn,
+              duration: _duration(DateTime.now().difference(connectedOn).abs()),
+              packetsIn: splitted[1],
+              packetsOut: splitted[2],
+              byteIn: splitted[3],
+              byteOut: splitted[4],
+            );
+          } else if (Platform.isAndroid) {
+            var data = jsonDecode(value);
+            var connectedOn =
+                DateTime.tryParse(data["connected_on"].toString()) ??
+                    _tempDateTime;
+            String byteIn =
+                data["byte_in"] != null ? data["byte_in"].toString() : "0";
+            String byteOut =
+                data["byte_out"] != null ? data["byte_out"].toString() : "0";
+            if (byteIn.trim().isEmpty) byteIn = "0";
+            if (byteOut.trim().isEmpty) byteOut = "0";
+            return VpnStatus(
+              connectedOn: connectedOn,
+              duration:
+                  _duration(DateTime.now().difference(connectedOn!).abs()),
+              byteIn: byteIn,
+              byteOut: byteOut,
+              packetsIn: byteIn,
+              packetsOut: byteOut,
+            );
+          } else {
+            throw Exception("Openvpn not supported on this platform");
+          }
+        });
+      }
+      return status;
+    });
   }
 
   ///Request android permission (Return true if already granted)
@@ -189,7 +243,10 @@ class OpenVPN {
 
   ///Private function to convert String to VPNStage
   static VPNStage _strToStage(String? stage) {
-    if (stage == null || stage.trim().isEmpty || stage.trim() == "idle") {
+    if (stage == null ||
+        stage.trim().isEmpty ||
+        stage.trim() == "idle" ||
+        stage.trim() == "invalid") {
       return VPNStage.disconnected;
     }
     var indexStage = VPNStage.values.indexWhere((element) => element
@@ -224,50 +281,9 @@ class OpenVPN {
       _vpnStatusTimer!.cancel();
       _vpnStatusTimer = null;
     }
-    _vpnStatusTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
-      _channelControl.invokeMethod("status").then((data) {
-        if (data == null) {
-          return onVpnStatusChanged?.call(VpnStatus.empty());
-        }
-
-        if (Platform.isIOS) {
-          var splitted = data.split("_");
-          var connectedOn = DateTime.tryParse(splitted[0]);
-          if (connectedOn == null) {
-            return onVpnStatusChanged?.call(VpnStatus.empty());
-          }
-
-          onVpnStatusChanged?.call(VpnStatus(
-            duration: _duration(DateTime.now().difference(connectedOn).abs()),
-            byteIn: splitted[2],
-            byteOut: splitted[3],
-            lastPacketReceive: splitted[1],
-          ));
-        } else {
-          var value = jsonDecode(data);
-          var connectedOn =
-              DateTime.tryParse(value["connected_on"].toString()) ??
-                  _tempDateTime;
-          if (connectedOn == null) {
-            return onVpnStatusChanged?.call(VpnStatus.empty());
-          }
-
-          String byteIn =
-              value["byte_in"] != null ? value["byte_in"].toString() : "0";
-          String byteOut =
-              value["byte_out"] != null ? value["byte_out"].toString() : "0";
-
-          if (byteIn.trim().isEmpty) byteIn = "0";
-          if (byteOut.trim().isEmpty) byteOut = "0";
-
-          onVpnStatusChanged?.call(VpnStatus(
-            duration: _duration(DateTime.now().difference(connectedOn).abs()),
-            byteIn: byteIn,
-            byteOut: byteOut,
-            lastPacketReceive: value["last_packet_receive"],
-          ));
-        }
-      });
+    _vpnStatusTimer ??=
+        Timer.periodic(const Duration(seconds: 1), (timer) async {
+      onVpnStatusChanged?.call(await status());
     });
   }
 }

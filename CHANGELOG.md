@@ -1,3 +1,8 @@
+## 1.2.0
+* Fix iOS issues (byteIn and byteOut not updated) #6
+* Add lastStatus and lastStage listener while initialize
+* Add packetsIn, packetsOut and connectedOn status
+* Update licenses to GPL3 (Before it was MIT)
 ## 1.1.3
 * Add permission request for android ```requestPermissionAndroid()``` #5
 * Continue the connection after user grant vpn connection #8

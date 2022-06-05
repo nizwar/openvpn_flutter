@@ -107,7 +107,10 @@ Before start, you have to initialize the OpenVPN plugin.
 1. View [Apple Guidelines](https://developer.apple.com/app-store/review/guidelines/#vpn-apps) Relating to VPN
 2. This plugin DOES use Encryption BUT, It uses Exempt Encryptions
 
-
+## Licenses
+* [openvpn_flutter](https://github.com/nizwar/openvpn_flutter/blob/master/LICENSE) for this plugin
+* [ics-openvpn](https://github.com/schwabe/ics-openvpn) for Android Engine 
+* [OpenVPNAdapter](https://github.com/ss-abramchuk/OpenVPNAdapter) for iOS Engine
 # Love my work?
 Don't forget to give me a 👍 &nbsp;or support me with a cup of ☕️  
 

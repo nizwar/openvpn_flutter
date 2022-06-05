@@ -108,45 +108,55 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         vpnAdapter.disconnect()
     }
     
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
+        if String(data: messageData, encoding: .utf8) == "OPENVPN_STATS" {            
+            var toSave = ""
+            let formatter = DateFormatter();
+            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss";            
+            toSave += UserDefaults.init(suiteName: groupIdentifier)?.string(forKey: "connected_on") ?? ""
+            toSave+="_"
+            toSave += String(vpnAdapter.interfaceStatistics.packetsIn)
+            toSave+="_"
+            toSave += String(vpnAdapter.interfaceStatistics.packetsOut)
+            toSave+="_"
+            toSave += String(vpnAdapter.interfaceStatistics.bytesIn)
+            toSave+="_"
+            toSave += String(vpnAdapter.interfaceStatistics.bytesOut)
+            UserDefaults.init(suiteName: groupIdentifier)?.setValue(toSave, forKey: "connectionUpdate")
+        }
+    }
 }
 
 extension PacketTunnelProvider: OpenVPNAdapterDelegate {
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, configureTunnelWithNetworkSettings networkSettings: NEPacketTunnelNetworkSettings?, completionHandler: @escaping (Error?) -> Void) {
         networkSettings?.dnsSettings?.matchDomains = [""]
         setTunnelNetworkSettings(networkSettings, completionHandler: completionHandler)
-        _updateConnectionStatus()
     }
-    
-    @objc func _updateConnectionStatus() {
-        var toSave = ""
-        let formatter = DateFormatter();
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss";
-        if vpnAdapter.transportStatistics.lastPacketReceived != nil{
-            toSave += formatter.string(from: vpnAdapter.transportStatistics.lastPacketReceived!)
-        }
-        toSave+="_"
-        toSave += String(vpnAdapter.transportStatistics.packetsIn)
-        toSave+="_"
-        toSave += String(vpnAdapter.transportStatistics.bytesIn)
-        toSave+="_"
-        toSave += String(vpnAdapter.transportStatistics.bytesOut)
-        UserDefaults.init(suiteName: groupIdentifier)?.setValue(toSave, forKey: "connectionUpdate")
-    }
+     
     
     func _updateEvent(_ event: OpenVPNAdapterEvent, openVPNAdapter: OpenVPNAdapter) {
         var toSave = ""
+        let formatter = DateFormatter();
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss";
         switch event {
         case .connected:
             toSave = "CONNECTED"
+            UserDefaults.init(suiteName: groupIdentifier)?.setValue(formatter.string(from: Date.now), forKey: "connected_on")
+            break
         case .disconnected:
             toSave = "DISCONNECTED"
+            break
         case .connecting:
             toSave = "CONNECTING"
+            break
         case .reconnecting:
             toSave = "RECONNECTING"
+            break
         case .info:
-            _updateConnectionStatus()
+            toSave = "CONNECTED"
+            break
         default:
+            UserDefaults.init(suiteName: groupIdentifier)?.removeObject(forKey: "connected_on")
             toSave = "INVALID"
         }
         UserDefaults.init(suiteName: groupIdentifier)?.setValue(toSave, forKey: "vpnStage")
@@ -154,7 +164,6 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
     
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleEvent event: OpenVPNAdapterEvent, message: String?) {
         PacketTunnelProvider.timeOutEnabled = true;
-        _updateConnectionStatus()
         _updateEvent(event, openVPNAdapter: openVPNAdapter)
         switch event {
         case .connected:
@@ -165,6 +174,7 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
             guard let startHandler = startHandler else { return }
             startHandler(nil)
             self.startHandler = nil
+            break
         case .disconnected:
             PacketTunnelProvider.timeOutEnabled = false;
             guard let stopHandler = stopHandler else { return }
@@ -173,15 +183,16 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
             }
             stopHandler()
             self.stopHandler = nil
+            break
         case .reconnecting:
             reasserting = true
+            break
         default:
             break
         }
     }
     
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleError error: Error) {
-        _updateConnectionStatus()
         guard let fatal = (error as NSError).userInfo[OpenVPNAdapterErrorFatalKey] as? Bool, fatal == true else {
             return
         }
@@ -197,7 +208,5 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
     }
     
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleLogMessage logMessage: String) {
-        _updateConnectionStatus()
     }
-    
 }
