@@ -9,6 +9,10 @@ Add this to your onActivityResult in MainActivity.java
 ```
 So it look like this
 ```java
+    ...
+    import id.laskarmedia.openvpn_flutter.OpenVPNFlutterPlugin;
+    ...
+    
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         OpenVPNFlutterPlugin.connectWhileGranted(requestCode == 24 && resultCode == RESULT_OK);
