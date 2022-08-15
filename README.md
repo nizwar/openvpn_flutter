@@ -19,6 +19,15 @@ So it look like this
         super.onActivityResult(requestCode, resultCode, data);
     }
 ```
+### <b>2. Google Play release setup</b>
+Add this to your files in `android` folder (special thanks to https://github.com/nizwar/openvpn_flutter/issues/10). Otherwise connection will not be
+established in some cases and will siliently report "disconnected" when trying to connect. Most likely it's related to some symbols stripping by
+Google Play.
+
+```
+gradle.properties > android.bundle.enableUncompressedNativeLibs=false
+AndroidManifest > android:extractNativeLibs="true" in application tag
+```
 
 ## iOS Setup
 
