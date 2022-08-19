@@ -90,9 +90,18 @@ Before start, you have to initialize the OpenVPN plugin.
 
 ### Connect to VPN
 ```dart
-    void connect(){
-        openvpn.connect(config, name, username: username, password: password, bypassPackages: [], certIsRequired: false);
-    }
+void connect() {
+  openvpn.connect(
+    config,
+    name,
+    username: username,
+    password: password,
+    bypassPackages: [],
+    // In iOS connection can stuck in "connecting" if this flag is "false". 
+    // Solution is to switch it to "true".
+    certIsRequired: false,
+  );
+}
 ```
 
 ### Disconnect 
