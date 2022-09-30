@@ -111,7 +111,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
 class VPNUtils {
     var providerManager: NETunnelProviderManager!
     var providerBundleIdentifier : String?
-    var vpnStageObserver : Any?
+    var vpnStageObserver : NSObjectProtocol?
     var localizedDescription : String?
     var groupIdentifier : String?
     var stage : FlutterEventSink!
