@@ -109,6 +109,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
 class VPNUtils {
     var providerManager: NETunnelProviderManager!
     var providerBundleIdentifier : String?
+    var vpnStageObserver : Any?
     var localizedDescription : String?
     var groupIdentifier : String?
     var stage : FlutterEventSink!
@@ -207,10 +208,13 @@ class VPNUtils {
                                 return;
                             }
                             do {
-                                NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange, object: nil , queue: nil) { notification in
+                                if self.vpnStageObserver != nil {
+                                    NotificationCenter.default.removeObserver(self.vpnStageObserver!, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+                                    }
+                                self.vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange, object: nil , queue: nil) { [weak self] notification in
                                     let nevpnconn = notification.object as! NEVPNConnection
                                     let status = nevpnconn.status
-                                    self.onVpnStatusChanged(notification: status)
+                                    self?.onVpnStatusChanged(notification: status)
                                 }
                                 
                                 if username != nil && password != nil{
