@@ -21,7 +21,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
         let vpnControlM = FlutterMethodChannel(name: SwiftOpenVPNFlutterPlugin.METHOD_CHANNEL_VPN_CONTROL, binaryMessenger: registrar.messenger())
         let vpnStageE = FlutterEventChannel(name: SwiftOpenVPNFlutterPlugin.EVENT_CHANNEL_VPN_STAGE, binaryMessenger: registrar.messenger())
         
-        vpnStageE.setStreamHandler(StageHandler()) 
+        vpnStageE.setStreamHandler(StageHandler())
         vpnControlM.setMethodCallHandler({(call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
             switch call.method{
             case "status":
@@ -114,6 +114,7 @@ class VPNUtils {
     var localizedDescription : String?
     var groupIdentifier : String?
     var stage : FlutterEventSink!
+    var vpnStageObserver : NSObjectProtocol?
     
     func loadProviderManager(completion:@escaping (_ error : Error?) -> Void)  {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error)  in
@@ -209,10 +210,13 @@ class VPNUtils {
                                 return;
                             }
                             do {
-                                NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange, object: nil , queue: nil) { notification in
+                                if self.vpnStageObserver != nil {
+                                    NotificationCenter.default.removeObserver(self.vpnStageObserver!, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+                                }
+                                self.vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange, object: nil , queue: nil) { [weak self] notification in
                                     let nevpnconn = notification.object as! NEVPNConnection
                                     let status = nevpnconn.status
-                                    self.onVpnStatusChanged(notification: status)
+                                    self?.onVpnStatusChanged(notification: status)
                                 }
                                 
                                 if username != nil && password != nil{
