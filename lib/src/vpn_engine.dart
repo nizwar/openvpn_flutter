@@ -78,7 +78,7 @@ class OpenVPN {
   ///
   ///providerBundleIdentfier is for your Network Extension identifier
   ///
-  ///localizedDescription is for Description to show user in settings
+  ///localizedDescription is for description to show in user's settings
   ///
   ///
   ///Will return latest VPNStage
@@ -111,7 +111,15 @@ class OpenVPN {
 
   ///Connect to VPN
   ///
-  ///bypassPackages to exclude some apps to access/use the VPN Connection, it was List<String> of applications package's name (Android Only)
+  ///config : Your openvpn configuration script, you can find it inside your .ovpn file
+  ///
+  ///name : name that will show in user's notification
+  ///
+  ///certIsRequired : default is false, if your config file has cert, set it to true
+  ///
+  ///username & password : set your username and password if your config file has auth-user-pass
+  ///
+  ///bypassPackages : exclude some apps to access/use the VPN Connection, it was List<String> of applications package's name (Android Only)
   void connect(String config, String name,
       {String? username,
       String? password,

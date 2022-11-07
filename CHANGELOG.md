@@ -1,3 +1,5 @@
+## 1.2.0+1
+* Update docs
 ## 1.2.0
 * Fix iOS issues (byteIn and byteOut not updated) #6
 * Add lastStatus and lastStage listener while initialize
