@@ -90,9 +90,18 @@ Before start, you have to initialize the OpenVPN plugin.
 
 ### Connect to VPN
 ```dart
-    void connect(){
-        openvpn.connect(config, name, username: username, password: password, bypassPackages: [], certIsRequired: false);
-    }
+void connect() {
+  openvpn.connect(
+    config,
+    name,
+    username: username,
+    password: password,
+    bypassPackages: [],
+    // In iOS connection can stuck in "connecting" if this flag is "false". 
+    // Solution is to switch it to "true".
+    certIsRequired: false,
+  );
+}
 ```
 
 ### Disconnect 
@@ -106,6 +115,13 @@ Before start, you have to initialize the OpenVPN plugin.
 # Publishing to Play Store and App Store
 ### Android
 1. You can use appbundle to publish the app
+2. Add this to your files in `android` folder (special thanks to https://github.com/nizwar/openvpn_flutter/issues/10). Otherwise connection will not be
+established in some cases and will siliently report "disconnected" when trying to connect. Most likely it's related to some symbols stripping by
+Google Play.
+```
+gradle.properties > android.bundle.enableUncompressedNativeLibs=false
+AndroidManifest > android:extractNativeLibs="true" in application tag
+```
 
 ### iOS
 1. View [Apple Guidelines](https://developer.apple.com/app-store/review/guidelines/#vpn-apps) Relating to VPN
