@@ -38,7 +38,8 @@ class _MyAppState extends State<MyApp> {
 
     engine.initialize(
       groupIdentifier: "group.com.laskarmedia.vpn",
-      providerBundleIdentifier: "id.laskarmedia.openvpnFlutterExample.VPNExtension",
+      providerBundleIdentifier:
+          "id.laskarmedia.openvpnFlutterExample.VPNExtension",
       localizedDescription: "VPN by Nizwar",
       lastStage: (stage) {
         setState(() {
@@ -55,7 +56,10 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> initPlatformState() async {
-    engine.connect(config, "USA", username: defaultVpnUsername, password: defaultVpnPassword, certIsRequired: true);
+    engine.connect(config, "USA",
+        username: defaultVpnUsername,
+        password: defaultVpnPassword,
+        certIsRequired: true);
     if (!mounted) return;
   }
 

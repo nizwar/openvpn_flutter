@@ -1,3 +1,5 @@
+## 1.2.1
+* Update openvpnlib
 ## 1.2.0+1
 * Update docs
 ## 1.2.0
