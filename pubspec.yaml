@@ -1,6 +1,6 @@
 name: openvpn_flutter_update
 description: A plugin that allow you to connect OpenVPN service with Flutter
-version: 1.2.1
+version: 1.2.2+1
 homepage: https://github.com/cihan53/openvpn_flutter_update
 
 environment:
