@@ -2,7 +2,7 @@ Connect OpenVPN service with Flutter, Issues and PRs are very welcome!
 
 ## Android Setup
 ### <b>1. Permission handler</b>
-Add this to your onActivityResult in MainActivity.java (Java)
+Add this to your onActivityResult in MainActivity.java (if you are using Java)
 
 ```java
     OpenVPNFlutterPlugin.connectWhileGranted(requestCode == 24 && resultCode == RESULT_OK);
@@ -20,7 +20,7 @@ So it look like this
     }
 ```
 
-Add this to your onAcivityResult in MainActivity.kt (Kotlin)
+Add this to your onAcivityResult in MainActivity.kt (if you are using Kotlin)
 
 ```kotlin
     OpenVPNFlutterPlugin.connectWhileGranted(requestCode == 24 && resultCode == RESULT_OK);
