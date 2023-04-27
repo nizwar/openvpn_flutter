@@ -124,17 +124,25 @@ class OpenVPN {
       {String? username,
       String? password,
       List<String>? bypassPackages,
-      bool certIsRequired = false}) async {
+      bool certIsRequired = false,
+      Function(Object)? iosError}) async {
     if (!initialized) throw ("OpenVPN need to be initialized");
     if (!certIsRequired) config += "client-cert-not-required";
     _tempDateTime = DateTime.now();
-    _channelControl.invokeMethod("connect", {
-      "config": config,
-      "name": name,
-      "username": username,
-      "password": password,
-      "bypass_packages": bypassPackages ?? []
-    });
+
+    try {
+      _channelControl.invokeMethod("connect", {
+        "config": config,
+        "name": name,
+        "username": username,
+        "password": password,
+        "bypass_packages": bypassPackages ?? []
+      });
+    } catch (error) {
+      if (iosError != null) {
+        iosError(error);
+      }
+    }
   }
 
   ///Disconnect from VPN
