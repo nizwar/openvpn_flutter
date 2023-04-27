@@ -55,11 +55,11 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 SwiftOpenVPNFlutterPlugin.utils.groupIdentifier = groupIdentifier
                 SwiftOpenVPNFlutterPlugin.utils.localizedDescription = localizedDescription
                 SwiftOpenVPNFlutterPlugin.utils.providerBundleIdentifier = providerBundleIdentifier
-                SwiftOpenVPNFlutterPlugin.utils.loadProviderManager{(err:Error?) in
-                    if let err == err {
+                SwiftOpenVPNFlutterPlugin.utils.loadProviderManager{ error in
+                    if let error == error {
                         result(FlutterError(code: "-4",
                                             message: "Other",
-                                            details: err.localizedDescription));
+                                            details: error.localizedDescription));
                     }else{
                         result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                     }
@@ -84,15 +84,16 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                                         details: "Config can't be nulled"))
                     return
                 }
-                SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password, completion: { (success: Error?) -> Void in
-                    if let error = success {
+                
+                SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password) { error in
+                    if let error = error {
                         result(FlutterError(code: "99",
                                             message: "permission denied",
                                             details: error.localizedDescription))
                     } else {
                         result(nil)
                     }
-                })
+                }
                 break;
             case "dispose":
                 self.initialized = false
