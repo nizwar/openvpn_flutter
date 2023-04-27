@@ -56,12 +56,12 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 SwiftOpenVPNFlutterPlugin.utils.localizedDescription = localizedDescription
                 SwiftOpenVPNFlutterPlugin.utils.providerBundleIdentifier = providerBundleIdentifier
                 SwiftOpenVPNFlutterPlugin.utils.loadProviderManager{(err:Error?) in
-                    if err == nil{
-                        result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
-                    }else{
+                    if let err == err {
                         result(FlutterError(code: "-4",
-                                            message: err.debugDescription,
-                                            details: err?.localizedDescription));
+                                            message: "Other",
+                                            details: err.localizedDescription));
+                    }else{
+                        result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                     }
                 }
                 self.initialized = true
@@ -86,9 +86,9 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 }
                 SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password, completion: { (success: Error?) -> Void in
                     if let error = success {
-                        result(FlutterError(code: "-5",
-                                            message: error.localizedDescription,
-                                            details: error.debugDescription))
+                        result(FlutterError(code: "-10",
+                                            message: "permission denied",
+                                            details: error.localizedDescription))
                     } else {
                         result(nil)
                     }
