@@ -235,6 +235,11 @@ class VPNUtils {
                                 completion(error);
                             }
                         })
+                    } else {
+                        guard let err = error else { return }
+                        if error.localizedDescription == "permission denied" {
+                            completion(error);
+                        }
                     }
                 })
             }
