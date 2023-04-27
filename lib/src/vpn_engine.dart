@@ -129,13 +129,15 @@ class OpenVPN {
     if (!certIsRequired) config += "client-cert-not-required";
     _tempDateTime = DateTime.now();
 
-    return await _channelControl.invokeMethod("connect", {
-      "config": config,
-      "name": name,
-      "username": username,
-      "password": password,
-      "bypass_packages": bypassPackages ?? []
-    });
+    try {
+      return await _channelControl.invokeMethod("connect", {
+        "config": config,
+        "name": name,
+        "username": username,
+        "password": password,
+        "bypass_packages": bypassPackages ?? []
+      });
+    } catch (e) {}
   }
 
   ///Disconnect from VPN
