@@ -55,13 +55,11 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 SwiftOpenVPNFlutterPlugin.utils.groupIdentifier = groupIdentifier
                 SwiftOpenVPNFlutterPlugin.utils.localizedDescription = localizedDescription
                 SwiftOpenVPNFlutterPlugin.utils.providerBundleIdentifier = providerBundleIdentifier
-                SwiftOpenVPNFlutterPlugin.utils.loadProviderManager{ error in
-                    if let error == error {
-                        result(FlutterError(code: "-4",
-                                            message: "Other",
-                                            details: error.localizedDescription));
-                    }else{
+                SwiftOpenVPNFlutterPlugin.utils.loadProviderManager{(err:Error?) in
+                    if err == nil{
                         result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
+                    }else{
+                        result(FlutterError(code: "-4", message: err?.localizedDescription, details: err?.localizedDescription));
                     }
                 }
                 self.initialized = true
@@ -85,15 +83,15 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                     return
                 }
                 
-                SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password) { error in
-                    if let error = error {
+                SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password, completion: {(success:Error?) -> Void in
+                    if(success == nil){
+                        result(nil)
+                    }else{
                         result(FlutterError(code: "99",
                                             message: "permission denied",
-                                            details: error.localizedDescription))
-                    } else {
-                        result(nil)
+                                            details: success?.localizedDescription))
                     }
-                }
+                })
                 break;
             case "dispose":
                 self.initialized = false
