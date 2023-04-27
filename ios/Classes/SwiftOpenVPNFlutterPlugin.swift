@@ -86,7 +86,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 }
                 SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password, completion: { (success: Error?) -> Void in
                     if let error = success {
-                        result(FlutterError(code: "-10",
+                        result(FlutterError(code: "99",
                                             message: "permission denied",
                                             details: error.localizedDescription))
                     } else {
