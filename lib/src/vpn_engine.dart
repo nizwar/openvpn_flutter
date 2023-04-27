@@ -138,7 +138,7 @@ class OpenVPN {
         "password": password,
         "bypass_packages": bypassPackages ?? []
       });
-    } catch (error) {
+    } on PlatformException catch (error) {
       if (iosError != null) {
         iosError(error);
       }
