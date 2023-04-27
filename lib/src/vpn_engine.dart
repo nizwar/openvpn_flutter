@@ -120,17 +120,16 @@ class OpenVPN {
   ///username & password : set your username and password if your config file has auth-user-pass
   ///
   ///bypassPackages : exclude some apps to access/use the VPN Connection, it was List<String> of applications package's name (Android Only)
-  void connect(String config, String name,
+  Future<dynamic> connect(String config, String name,
       {String? username,
       String? password,
       List<String>? bypassPackages,
-      bool certIsRequired = false,
-      Function(Object)? iosError}) async {
+      bool certIsRequired = false}) async {
     if (!initialized) throw ("OpenVPN need to be initialized");
     if (!certIsRequired) config += "client-cert-not-required";
     _tempDateTime = DateTime.now();
 
-    _channelControl.invokeMethod("connect", {
+    return await _channelControl.invokeMethod("connect", {
       "config": config,
       "name": name,
       "username": username,
