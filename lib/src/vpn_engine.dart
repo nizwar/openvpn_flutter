@@ -139,7 +139,8 @@ class OpenVPN {
         "bypass_packages": bypassPackages ?? []
       });
     } on PlatformException catch (e) {
-      throw FlutterError('${e.message}}');
+      return e.message;
+      // throw FlutterError('${e.message}}');
     }
   }
 
