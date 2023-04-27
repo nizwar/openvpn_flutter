@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'model/vpn_status.dart';
 
@@ -137,7 +138,9 @@ class OpenVPN {
         "password": password,
         "bypass_packages": bypassPackages ?? []
       });
-    } catch (e) {}
+    } on PlatformException catch (e) {
+      throw FlutterError('${e.message}}');
+    }
   }
 
   ///Disconnect from VPN
