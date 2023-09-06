@@ -1,4 +1,4 @@
-package id.laskarmedia.openvpn_flutter;
+package id.superfuture.openvpn_flutter;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -30,9 +30,9 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware {
     private EventChannel.EventSink vpnStageSink;
 //    private EventChannel.EventSink vpnStatusSink;
 
-    private static final String EVENT_CHANNEL_VPN_STAGE = "id.laskarmedia.openvpn_flutter/vpnstage";
-    //    private static final String EVENT_CHANNEL_VPN_STATUS = "id.laskarmedia.openvpn_flutter/vpnstatus";
-    private static final String METHOD_CHANNEL_VPN_CONTROL = "id.laskarmedia.openvpn_flutter/vpncontrol";
+    private static final String EVENT_CHANNEL_VPN_STAGE = "id.superfuture.openvpn_flutter/vpnstage";
+    //    private static final String EVENT_CHANNEL_VPN_STATUS = "id.superfuture.openvpn_flutter/vpnstatus";
+    private static final String METHOD_CHANNEL_VPN_CONTROL = "id.superfuture.openvpn_flutter/vpncontrol";
 
     private static String config = "", username = "", password = "", name = "";
 

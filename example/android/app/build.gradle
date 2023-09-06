@@ -33,7 +33,7 @@ android {
     }
 
     defaultConfig { 
-        applicationId "id.laskarmedia.openvpn_flutter_example"
+        applicationId "id.superfuture.openvpn_flutter_example"
         minSdkVersion 16
         targetSdkVersion 33
         versionCode flutterVersionCode.toInteger()

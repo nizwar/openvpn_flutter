@@ -36,11 +36,11 @@ enum VPNStage {
 class OpenVPN {
   ///Channel's names of _vpnStageSnapshot
   static const String _eventChannelVpnStage =
-      "id.laskarmedia.openvpn_flutter/vpnstage";
+      "id.superfuture.openvpn_flutter/vpnstage";
 
   ///Channel's names of _channelControl
   static const String _methodChannelVpnControl =
-      "id.laskarmedia.openvpn_flutter/vpncontrol";
+      "id.superfuture.openvpn_flutter/vpncontrol";
 
   ///Method channel to invoke methods from native side
   static const MethodChannel _channelControl =

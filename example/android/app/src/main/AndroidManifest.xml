@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="id.laskarmedia.openvpn_flutter_example">
+    package="id.superfuture.openvpn_flutter_example">
    <application
         android:label="openvpn_flutter_example"
         android:icon="@mipmap/ic_launcher">

@@ -11,7 +11,7 @@ OpenVPN for flutter
                        DESC
   s.homepage         = 'http://nizwar.github.io/home'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Laskarmedia' => 'nizwar@laskarmedia.id' }
+  s.author           = { 'superfuture' => 'nizwar@superfuture.id' }
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
