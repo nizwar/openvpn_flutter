@@ -5,16 +5,15 @@ import NetworkExtension
 public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
     private static var utils : VPNUtils! = VPNUtils()
     
-    private static var EVENT_CHANNEL_VPN_STAGE : String = "id.laskarmedia.openvpn_flutter/vpnstage"
-    private static var METHOD_CHANNEL_VPN_CONTROL : String = "id.laskarmedia.openvpn_flutter/vpncontrol"
+    private static var EVENT_CHANNEL_VPN_STAGE = "id.laskarmedia.openvpn_flutter/vpnstage"
+    private static var METHOD_CHANNEL_VPN_CONTROL = "id.laskarmedia.openvpn_flutter/vpncontrol"
      
-    public  static var stage: FlutterEventSink?
+    public static var stage: FlutterEventSink?
     private var initialized : Bool = false
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = SwiftOpenVPNFlutterPlugin()
         instance.onRegister(registrar)
-        
     }
     
     public func onRegister(_ registrar: FlutterPluginRegistrar){
@@ -23,7 +22,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
         
         vpnStageE.setStreamHandler(StageHandler())
         vpnControlM.setMethodCallHandler({(call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-            switch call.method{
+            switch call.method {
             case "status":
                 SwiftOpenVPNFlutterPlugin.utils.getTraffictStats()
                 result(UserDefaults.init(suiteName: SwiftOpenVPNFlutterPlugin.utils.groupIdentifier)?.string(forKey: "connectionUpdate"))
@@ -36,15 +35,21 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 let localizedDescription: String? = (call.arguments as? [String: Any])?["localizedDescription"] as? String
                 let groupIdentifier: String? = (call.arguments as? [String: Any])?["groupIdentifier"] as? String
                 if providerBundleIdentifier == nil  {
-                    result(FlutterError(code: "-2", message: "providerBundleIdentifier content empty or null", details: nil));
+                    result(FlutterError(code: "-2",
+                                        message: "providerBundleIdentifier content empty or null",
+                                        details: nil));
                     return;
                 }
                 if localizedDescription == nil  {
-                    result(FlutterError(code: "-3", message: "localizedDescription content empty or null", details: nil));
+                    result(FlutterError(code: "-3",
+                                        message: "localizedDescription content empty or null",
+                                        details: nil));
                     return;
                 }
                 if groupIdentifier == nil  {
-                    result(FlutterError(code: "-4", message: "groupIdentifier content empty or null", details: nil));
+                    result(FlutterError(code: "-4",
+                                        message: "groupIdentifier content empty or null",
+                                        details: nil));
                     return;
                 }
                 SwiftOpenVPNFlutterPlugin.utils.groupIdentifier = groupIdentifier
@@ -54,7 +59,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                     if err == nil{
                         result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                     }else{
-                        result(FlutterError(code: "-4", message: err.debugDescription, details: err?.localizedDescription));
+                        result(FlutterError(code: "-4", message: err?.localizedDescription, details: err?.localizedDescription));
                     }
                 }
                 self.initialized = true
@@ -64,20 +69,27 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 break;
             case "connect":
                 if !self.initialized {
-                    result(FlutterError(code: "-1", message: "VPNEngine need to be initialize", details: nil));
+                    result(FlutterError(code: "-1",
+                                        message: "VPNEngine need to be initialize",
+                                        details: nil));
                 }
                 let config: String? = (call.arguments as? [String : Any])? ["config"] as? String
                 let username: String? = (call.arguments as? [String : Any])? ["username"] as? String
                 let password: String? = (call.arguments as? [String : Any])? ["password"] as? String
                 if config == nil{
-                    result(FlutterError(code: "-2", message:"Config is empty or nulled", details: "Config can't be nulled"))
+                    result(FlutterError(code: "-2",
+                                        message:"Config is empty or nulled",
+                                        details: "Config can't be nulled"))
                     return
                 }
+                
                 SwiftOpenVPNFlutterPlugin.utils.configureVPN(config: config, username: username, password: password, completion: {(success:Error?) -> Void in
                     if(success == nil){
                         result(nil)
                     }else{
-                        result(FlutterError(code: "-5", message: success?.localizedDescription, details: success.debugDescription))
+                        result(FlutterError(code: "99",
+                                            message: "permission denied",
+                                            details: success?.localizedDescription))
                     }
                 })
                 break;
@@ -85,7 +97,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 self.initialized = false
             default:
                 break;
-                
             }
         })
     }
@@ -181,7 +192,6 @@ class VPNUtils {
         else{
             return "disconnected"
         }
-        //        return "DISCONNECTED"
     }
     
     func configureVPN(config: String?, username : String?,password : String?,completion:@escaping (_ error : Error?) -> Void) {
@@ -211,9 +221,13 @@ class VPNUtils {
                             }
                             do {
                                 if self.vpnStageObserver != nil {
-                                    NotificationCenter.default.removeObserver(self.vpnStageObserver!, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+                                    NotificationCenter.default.removeObserver(self.vpnStageObserver!,
+                                                                              name: NSNotification.Name.NEVPNStatusDidChange,
+                                                                              object: nil)
                                 }
-                                self.vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange, object: nil , queue: nil) { [weak self] notification in
+                                self.vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange,
+                                                                                               object: nil ,
+                                                                                               queue: nil) { [weak self] notification in
                                     let nevpnconn = notification.object as! NEVPNConnection
                                     let status = nevpnconn.status
                                     self?.onVpnStatusChanged(notification: status)
@@ -235,6 +249,8 @@ class VPNUtils {
                                 completion(error);
                             }
                         })
+                    } else {
+                        completion(error);
                     }
                 })
             }

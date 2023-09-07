@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'model/vpn_status.dart';
 
@@ -120,21 +121,26 @@ class OpenVPN {
   ///username & password : set your username and password if your config file has auth-user-pass
   ///
   ///bypassPackages : exclude some apps to access/use the VPN Connection, it was List<String> of applications package's name (Android Only)
-  void connect(String config, String name,
+  Future connect(String config, String name,
       {String? username,
       String? password,
       List<String>? bypassPackages,
-      bool certIsRequired = false}) async {
+      bool certIsRequired = false}) {
     if (!initialized) throw ("OpenVPN need to be initialized");
     if (!certIsRequired) config += "client-cert-not-required";
     _tempDateTime = DateTime.now();
-    _channelControl.invokeMethod("connect", {
-      "config": config,
-      "name": name,
-      "username": username,
-      "password": password,
-      "bypass_packages": bypassPackages ?? []
-    });
+
+    try {
+      return _channelControl.invokeMethod("connect", {
+        "config": config,
+        "name": name,
+        "username": username,
+        "password": password,
+        "bypass_packages": bypassPackages ?? []
+      });
+    } on PlatformException catch (e) {
+      throw ArgumentError(e.message);
+    }
   }
 
   ///Disconnect from VPN
