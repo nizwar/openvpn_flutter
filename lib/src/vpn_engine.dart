@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math'; 
+import 'dart:math';
 import 'package:flutter/services.dart';
 import 'model/vpn_status.dart';
 
@@ -103,9 +103,15 @@ class OpenVPN {
       "groupIdentifier": groupIdentifier,
       "providerBundleIdentifier": providerBundleIdentifier,
       "localizedDescription": localizedDescription,
-    }).then((value) {
-      status().then((value) => lastStatus?.call(value));
-      stage().then((value) => lastStage?.call(value));
+    }).then((value) async {
+      final status = await this.status();
+      final stage = await this.stage();
+      lastStatus?.call(status);
+      lastStage?.call(stage);
+
+      if (stage == VPNStage.connected && _vpnStatusTimer == null) {
+        _createTimer();
+      }
     });
   }
 
