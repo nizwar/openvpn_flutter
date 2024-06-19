@@ -38,7 +38,8 @@ class _MyAppState extends State<MyApp> {
 
     engine.initialize(
       groupIdentifier: "group.com.laskarmedia.vpn",
-      providerBundleIdentifier: "id.laskarmedia.openvpnFlutterExample.VPNExtension",
+      providerBundleIdentifier:
+          "id.laskarmedia.openvpnFlutterExample.VPNExtension",
       localizedDescription: "VPN by Nizwar",
       lastStage: (stage) {
         setState(() {
