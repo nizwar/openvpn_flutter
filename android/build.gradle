@@ -33,7 +33,7 @@ allprojects {
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 33
+    compileSdkVersion 34
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -46,5 +46,5 @@ android {
 }
 
 dependencies {
-    implementation 'com.github.nizwar:openvpn_library:5f06771b85'
+    implementation 'com.github.nizwar:openvpn_library:c3e3e98'
 }
