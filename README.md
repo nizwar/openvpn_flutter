@@ -2,6 +2,7 @@ Connect OpenVPN service with Flutter, Issues and PRs are very welcome!
 
 ## Android Setup
 ### <b>1. Permission handler</b>
+#### JAVA
 Add this to your onActivityResult in MainActivity.java (if you are using Java)
 
 ```java
@@ -20,6 +21,7 @@ So it look like this
     }
 ```
 
+#### Kotlin
 Add this to your onAcivityResult in MainActivity.kt (if you are using Kotlin)
 
 ```kotlin
@@ -137,6 +139,39 @@ Google Play.
 ```
 gradle.properties > android.bundle.enableUncompressedNativeLibs=false
 AndroidManifest > android:extractNativeLibs="true" in application tag
+```
+
+app/build.gradle add these inside android tag
+```gradle
+
+android{
+    ...
+    //from here ======
+    lintOptions {
+        disable 'InvalidPackage'
+        checkReleaseBuilds false
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    bundle {
+        language {
+            enableSplit = false
+        }
+        density {
+            enableSplit = false
+        }
+        abi {
+            enableSplit = false
+        }
+    }
+    //to here
+    ...
+}
 ```
 
 ### iOS
