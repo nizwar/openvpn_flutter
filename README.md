@@ -174,6 +174,18 @@ android{
 }
 ```
 
+#### Notifications
+As the plugin shows notification for connection status and connection detail, you have to request permission by using 3rd-party packages.
+
+Example by using [permission_handler](https://pub.dev/packages/permission_handler)
+```dart
+    ///Put it anywhere you wish like once you initialize the vpn or pre-connect the server
+    Permission.notification.isGranted.then((_) {
+      if (!_) Permission.notification.request();
+    });
+```
+
+
 ### iOS
 1. View [Apple Guidelines](https://developer.apple.com/app-store/review/guidelines/#vpn-apps) Relating to VPN
 2. This plugin DOES use Encryption BUT, It uses Exempt Encryptions

@@ -1,3 +1,7 @@
+## 1.3.1
+* Upgrade library gradles
+* Update native for Permission channel name ($APPNAME VPN Background & $APPNAME VPN Stats)
+* Clearify notifications on readme.md
 ## 1.3.0
 * Adept for SDK 34
 * Solving #105, #29, #99
