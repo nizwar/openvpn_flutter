@@ -196,7 +196,8 @@ class OpenVPN {
             var data = jsonDecode(value);
             var connectedOn =
                 DateTime.tryParse(data["connected_on"].toString()) ??
-                    _tempDateTime;
+                    _tempDateTime ??
+                    DateTime.now();
             String byteIn =
                 data["byte_in"] != null ? data["byte_in"].toString() : "0";
             String byteOut =
@@ -205,8 +206,7 @@ class OpenVPN {
             if (byteOut.trim().isEmpty) byteOut = "0";
             return VpnStatus(
               connectedOn: connectedOn,
-              duration:
-                  _duration(DateTime.now().difference(connectedOn!).abs()),
+              duration: _duration(DateTime.now().difference(connectedOn).abs()),
               byteIn: byteIn,
               byteOut: byteOut,
               packetsIn: byteIn,
