@@ -1,3 +1,5 @@
+## 1.3.2
+* Fix datetime that being nulled (VPN Status)
 ## 1.3.1
 * Upgrade library gradles
 * Update native for Permission channel name ($APPNAME VPN Background & $APPNAME VPN Stats)
