@@ -33,6 +33,7 @@ allprojects {
 apply plugin: 'com.android.library'
 
 android {
+    namespace = 'id.laskarmedia.openvpn_flutter'
     compileSdkVersion 34
 
     compileOptions {
