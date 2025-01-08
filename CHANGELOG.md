@@ -1,3 +1,5 @@
+## 1.3.3
+* Solving namespace for android build
 ## 1.3.2
 * Fix datetime that being nulled (VPN Status)
 ## 1.3.1
