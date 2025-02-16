@@ -1,24 +1,74 @@
 name: Openvpn_flutter
-
 on: push
-    
+
 jobs:
   build:
-    name: Build APK
-    runs-on: macos-latest
+    name: Build Flutter Artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [documentation, apks]
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions/setup-java@v1
-      with:
-        java-version: '12.x'
-    - uses: subosito/flutter-action@v1
-      with:
-        flutter-version: '2.5.3'
-    - run: flutter pub get
-    - run: cd example && flutter build apk --release --split-per-abi
-    - name: Release apks
-      uses: ncipollo/release-action@v1
-      with:
-        artifacts: "example/build/app/outputs/apk/release/*.apk"
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag: v1.0.${{github.run_number}}
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up JDK 21
+        if: matrix.target != 'documentation'
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'adopt'
+          java-version: '21.x'
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build Documentation
+        if: matrix.target == 'documentation'
+        run: |
+          flutter pub global activate dartdoc
+          flutter pub global run dartdoc
+
+      - name: Build APKs (Split by ABI)
+        if: matrix.target == 'apks'
+        run: cd example && flutter build apk --release --split-per-abi
+ 
+      - name: Upload artifacts
+        if: matrix.target == 'apks' || matrix.target == 'appbundle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-artifacts-${{ matrix.target }}
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: ignore
+          overwrite: true
+
+  publish:
+    name: Publish the binaries
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2 
+
+      - name: Get project version
+        id: project_version
+        uses: its404/get-flutter-version@v1.0.0
+        
+      - name: Download apks
+        uses: actions/download-artifact@v4
+        with:
+          name: publish-artifacts-apks
+          path: build/app/outputs/flutter-apk
+ 
+      - name: Release Binary
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "build/app/outputs/bundle/release/*.aab, build/app/outputs/flutter-apk/*.apk"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ steps.project_version.outputs.version_number }}+${{steps.project_version.outputs.build_number}}-${{github.run_number}}
+          name: "Release ${{ steps.project_version.outputs.version_number }}+${{steps.project_version.outputs.build_number}}"
+          generateReleaseNotes: true
