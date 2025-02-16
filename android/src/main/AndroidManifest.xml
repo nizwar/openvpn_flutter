@@ -1,5 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="id.laskarmedia.openvpn_flutter">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="id.laskarmedia.openvpn_flutter">
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" android:minSdkVersion="34" />
+    <application>
+        <service
+            android:name="de.blinkt.openvpn.core.OpenVPNService"
+            android:foregroundServiceType="systemExempted"
+            android:exported="false"
+            tools:replace="android:exported" />
+    </application>
 </manifest>
