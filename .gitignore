@@ -30,4 +30,3 @@
 .dart_tool/
 .packages
 build/
-*.lock
