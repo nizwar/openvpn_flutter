@@ -1,6 +1,7 @@
 name: openvpn_flutter_example
 description: Demonstrates how to use the openvpn_flutter plugin. 
 publish_to: 'none' 
+version: 1.0.0+1
 
 environment:
   sdk: ">=2.15.0 <4.0.0" 
