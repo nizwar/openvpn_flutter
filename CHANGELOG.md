@@ -1,3 +1,5 @@
+## 1.3.3
+* Fix notification issue for newest SDK
 ## 1.3.2
 * Fix datetime that being nulled (VPN Status)
 ## 1.3.1
