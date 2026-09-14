@@ -104,9 +104,24 @@ answers depending on how you ship.
 | Mac App Store | App Extension (`.appex`) | `Contents/PlugIns/` |
 | Developer ID (outside the store) | **System Extension** | `Contents/Library/SystemExtensions/` |
 
-Both use the **same** entitlement value — `packet-tunnel-provider`. There is no
-`-systemextension` variant, despite what the naming elsewhere in NetworkExtension
-suggests.
+The entitlement value differs by **profile**, not by packaging:
+
+| Profile | `com.apple.developer.networking.networkextension` value |
+|---|---|
+| Development | `packet-tunnel-provider` |
+| Developer ID | `packet-tunnel-provider-systemextension` |
+
+Both spellings exist (they sit next to each other in the OS string table, along
+with the app-proxy, content-filter and dns-proxy pairs). Xcode's templates seed
+the bare value for **both** target types, which is correct for development and
+wrong for Developer ID — a Developer ID profile does not grant the bare value,
+and a development profile does not grant the `-systemextension` one. To see what
+a given profile actually grants:
+
+```bash
+security cms -D -i YourProfile.provisionprofile \
+  | plutil -extract Entitlements xml1 -o - -
+```
 
 In Xcode: **File → New → Target →** either *Network Extension* under
 **Application Extension** or under **System Extension**.
