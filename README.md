@@ -91,6 +91,94 @@ Open `VPNExtension > PacketTunnelProvider.swift` and copy-paste the script from 
 
 <img src="https://blogger.googleusercontent.com/img/a/AVvXsEhPf7Vl_8LPYMTTCn0UbpR3f3qzaFPFRMikSg8xetWRyfTuViq6o3fdrjU4-jD-xZtkOZV_i2WoNXkcHLn7znHengHZGgtlJlNbNk6vjNYgI2jYg8ToOYIQjR7QBd443ee4GqpEww0FYPrIiIpabUthpur6SakiPJM1dsDNCBW9ROWixuEzrk61aIod=s600">
 
+## macOS Setup
+
+macOS uses the same `NETunnelProviderManager` API as iOS, so the Dart side is
+identical. What differs is how the provider is packaged, and there are two
+answers depending on how you ship.
+
+### 1. Pick your packaging
+
+| Distribution | Provider is a | Lives in |
+|---|---|---|
+| Mac App Store | App Extension (`.appex`) | `Contents/PlugIns/` |
+| Developer ID (outside the store) | **System Extension** | `Contents/Library/SystemExtensions/` |
+
+Both use the **same** entitlement value — `packet-tunnel-provider`. There is no
+`-systemextension` variant, despite what the naming elsewhere in NetworkExtension
+suggests.
+
+In Xcode: **File → New → Target →** either *Network Extension* under
+**Application Extension** or under **System Extension**.
+
+### 2. Capabilities
+
+Add **Network Extensions** and **App Groups** to both the Runner target and the
+new target.
+
+**The App Group must be Team-ID prefixed on macOS.** This is the difference that
+costs the most time: iOS takes `group.com.example.app`, macOS takes
+`$(TeamIdentifierPrefix)group.com.example.app`. Pass the prefixed form to
+`initialize(groupIdentifier:)` on macOS, or the app and the extension end up
+reading two different `UserDefaults` suites — the tunnel connects and the app
+reports nothing.
+
+### 3. System Extension specifics
+
+A system extension is a standalone executable, not a loaded bundle, so it needs
+a `main.swift`:
+
+```swift
+import Foundation
+import NetworkExtension
+
+autoreleasepool { NEProvider.startSystemExtensionMode() }
+dispatchMain()
+```
+
+and an `Info.plist` naming the provider class:
+
+```xml
+<key>NetworkExtension</key>
+<dict>
+    <key>NEProviderClasses</key>
+    <dict>
+        <key>com.apple.networkextension.packet-tunnel</key>
+        <string>$(PRODUCT_MODULE_NAME).PacketTunnelProvider</string>
+    </dict>
+    <key>NEMachServiceName</key>
+    <string>$(TeamIdentifierPrefix)group.com.example.app</string>
+</dict>
+<key>NSSystemExtensionUsageDescription</key>
+<string>Needed to run the VPN tunnel.</string>
+```
+
+The containing app must install it at runtime with
+`OSSystemExtensionManager.shared.submitRequest(...)` and the user approves it in
+**System Settings → Privacy & Security**. Until it is approved, `connect()`
+fails because there is no provider to start.
+
+To test before notarizing: `systemextensionsctl developer on` (needs SIP
+disabled). A notarized build does not need developer mode.
+
+### 4. Podfile
+
+```ruby
+target 'VPNExtension' do
+  use_frameworks!
+  pod 'OpenVPNAdapter', :git => 'https://github.com/ss-abramchuk/OpenVPNAdapter.git', :tag => '0.8.0'
+end
+```
+
+`OpenVPNAdapter` supports macOS (`osx 10.11` in its podspec), so the engine
+itself needs nothing special.
+
+### 5. Provider implementation
+
+Identical to the iOS `PacketTunnelProvider.swift` in this README's iOS section.
+The adapter, the delegate callbacks and the `providerConfiguration` keys are the
+same on both platforms.
+
 ## Note
 
 You must use iOS devices instead of the simulator to connect.
