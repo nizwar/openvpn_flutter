@@ -256,6 +256,51 @@ Identical to the iOS `PacketTunnelProvider.swift` in this README's iOS section.
 The adapter, the delegate callbacks and the `providerConfiguration` keys are the
 same on both platforms.
 
+### 6. Forward the engine's log, or you are blind
+
+`VPNStage.connecting` is where every failure in this stack ends up, and the
+plugin cannot tell you why: the reason exists inside the provider process and
+nowhere else. The app sees `connecting`, `nesessionmanager` sees a healthy
+provider, and `handleLogMessage` — which the reference implementation leaves
+empty — is handed the one line that explains it and drops it.
+
+Forward it, in debug builds at least:
+
+```swift
+func openVPNAdapter(
+    _ openVPNAdapter: OpenVPNAdapter,
+    handleLogMessage logMessage: String
+) {
+    #if DEBUG
+        os_log("OpenVPN: %{public}@", logMessage)
+    #endif
+}
+```
+
+Three details, each of which cost a round trip:
+
+* **`os_log` with `%{public}@`, not `NSLog("%@", …)`.** The unified log redacts
+  dynamic string arguments by default, and the NSLog version produces a run of
+  `(Foundation) <private>` lines — correctly timed, carrying nothing.
+* **`#if DEBUG` needs `SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG` on the
+  extension target's Debug configuration.** Xcode sets it on app targets; a
+  hand-made or script-generated extension target often has no value at all, and
+  then the block silently never compiles in.
+* **Keep release silent.** OpenVPN 3's log carries the profile's remote, its
+  certificate subject and its cipher negotiation, and os_log puts that in the
+  device log.
+
+Read it with:
+
+```bash
+log show --last 5m --predicate 'process CONTAINS "VPNExtension"' | grep OpenVPN
+```
+
+`Server poll timeout, trying next remote entry...` after `Contacting <ip> via
+UDP` means the client sent its handshake and nothing came back — a server,
+firewall or `tls-crypt` key problem, not a client one. That single line is the
+difference between debugging the app and debugging the server.
+
 ## Note
 
 You must use iOS devices instead of the simulator to connect.
