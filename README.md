@@ -170,8 +170,17 @@ and an `Info.plist` naming the provider class:
 
 The containing app must install it at runtime with
 `OSSystemExtensionManager.shared.submitRequest(...)` and the user approves it in
-**System Settings → Privacy & Security**. Until it is approved, `connect()`
-fails because there is no provider to start.
+**System Settings → General → Login Items & Extensions → Network Extensions**.
+(It lived in Privacy & Security until macOS 15; every guide still naming that
+pane predates the move.) Until it is approved, `connect()` fails because there
+is no provider to start.
+
+macOS also refuses to install a system extension for an app running from
+anywhere but `/Applications` — `OSSystemExtensionError` 3, raised before
+anything is queued, so no approval prompt appears either. `flutter run -d macos`
+and Xcode both launch from a build directory, so **the tunnel cannot be tested
+on the normal dev loop**: copy the build to `/Applications` and launch it from
+there (a symlink does not work, the kernel resolves it).
 
 To test before notarizing: `systemextensionsctl developer on` (needs SIP
 disabled). A notarized build does not need developer mode.
@@ -187,6 +196,59 @@ end
 
 `OpenVPNAdapter` supports macOS (`osx 10.11` in its podspec), so the engine
 itself needs nothing special.
+
+**A system extension must embed the framework itself, and CocoaPods will not do
+it for you.** This one costs an afternoon, because nothing about it looks like a
+failure until the very end:
+
+CocoaPods adds its `[CP] Embed Pods Frameworks` phase only to targets whose
+`symbol_type` is in `EMBED_FRAMEWORK_TARGET_TYPES`, and `symbol_type` comes from
+Xcodeproj's `PRODUCT_TYPE_UTI` table — which has no entry for
+`com.apple.product-type.system-extension`. The type resolves to `nil`, the
+target falls out of every list, and you get a `Pods-VPNExtension-frameworks.sh`
+that is generated correctly and never run. An app extension (`.appex`) is fine,
+because its host app embeds the frameworks for it; a system extension is a
+standalone process with no host.
+
+The build succeeds. The extension installs. `systemextensionsctl list` shows it
+`[activated enabled]` and so does System Settings. Then every start dies in dyld
+before `main`:
+
+```
+launchd: exited with exit reason (namespace: 6 code: 0x1) - OS_REASON_DYLD |
+  Library not loaded: @rpath/OpenVPNAdapter.framework/Versions/A/OpenVPNAdapter
+  ... service has crashed 44 times in a row
+```
+
+`nesessionmanager` logs `Sending start command`, the provider never activates,
+and `NEVPNStatus` sits on `connecting` forever — so the Dart side reports
+`VPNStage.connecting` and nothing else, with no error to show anyone. To see it:
+
+```bash
+log show --last 15m --predicate 'process == "nesessionmanager"' | grep -i <your-extension-id>
+```
+
+Fix it by adding the phase to the extension target by hand — run the script
+CocoaPods already wrote for you, as the target's **last** build phase:
+
+```
+"${PODS_ROOT}/Target Support Files/Pods-VPNExtension/Pods-VPNExtension-frameworks.sh"
+```
+
+with input paths `…/Pods-VPNExtension-frameworks.sh` and
+`${BUILT_PRODUCTS_DIR}/OpenVPNAdapter/OpenVPNAdapter.framework`, and output path
+`${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OpenVPNAdapter.framework`.
+`pod install` leaves it alone for the same reason it never added it: both the
+add and the remove path iterate the same empty target list. Verify with
+
+```bash
+ls YourApp.app/Contents/Library/SystemExtensions/*.systemextension/Contents/Frameworks
+```
+
+Signing a Developer ID build then has one more nested item: sign the framework,
+then the `.systemextension` with its entitlements, then the app — inside-out,
+and without `--deep` on the outer bundle, which would re-seal the extension
+without its entitlements.
 
 ### 5. Provider implementation
 
