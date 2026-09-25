@@ -1,6 +1,6 @@
 name: openvpn_flutter
 description: A plugin that allow you to connect OpenVPN service with Flutter
-version: 1.3.4
+version: 1.4.0+1
 homepage: https://github.com/nizwar/openvpn_flutter
 
 environment:
@@ -9,13 +9,18 @@ environment:
 
 dependencies:
   flutter:
-    sdk: flutter 
+    sdk: flutter
+  ffi: ^2.1.0
+  http: ^1.1.0
+  path_provider: ^2.1.1
+  crypto: ^3.0.3
+  path: ^1.8.3
 
 dev_dependencies:
-  flutter_lints: ^3.0.1
+  flutter_lints: 
   flutter_test:
     sdk: flutter
-    
+
 flutter:
   plugin:
     platforms:
@@ -24,3 +29,16 @@ flutter:
         pluginClass: OpenVPNFlutterPlugin
       ios:
         pluginClass: OpenVPNFlutterPlugin
+      windows:
+        pluginClass: OpenvpnFlutterPlugin
+  # Flutter only bundles files directly inside a declared directory, so every
+  # driver sub-directory must be listed explicitly.
+  assets:
+    - assets/openvpn/windows/x64/
+    - assets/openvpn/windows/x64/drivers/ovpn-dco/win10/
+    - assets/openvpn/windows/x64/drivers/ovpn-dco/win11/
+    - assets/openvpn/windows/x64/drivers/tap/amd64/win10/
+    - assets/openvpn/windows/arm64/
+    - assets/openvpn/windows/arm64/drivers/ovpn-dco/win10/
+    - assets/openvpn/windows/arm64/drivers/ovpn-dco/win11/
+    - assets/openvpn/windows/arm64/drivers/tap/arm64/win10/

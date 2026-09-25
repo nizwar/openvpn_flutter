@@ -7,6 +7,8 @@ class VpnStatus {
     this.byteOut,
     this.packetsIn,
     this.packetsOut,
+    this.windowsDriver,
+    this.windowsConnectMode,
   });
 
   ///Latest connection date
@@ -28,6 +30,27 @@ class VpnStatus {
   ///Packets out byte usages
   final String? packetsOut;
 
+  /// Active Windows driver: "ovpn-dco" or "tap-windows6" (Windows only).
+  final String? windowsDriver;
+
+  /// How openvpn.exe was launched: "service" or "direct" (Windows only).
+  final String? windowsConnectMode;
+
+  /// Human-readable Windows driver label for UI.
+  String? get windowsDriverLabel {
+    switch (windowsDriver) {
+      case 'ovpn-dco':
+        return 'Win-DCO';
+      case 'tap-windows6':
+        if (windowsConnectMode == 'direct') {
+          return 'TAP (mode direct)';
+        }
+        return 'TAP (repli)';
+      default:
+        return null;
+    }
+  }
+
   /// VPNStatus as empty data
   factory VpnStatus.empty() => VpnStatus(
         duration: "00:00:00",
@@ -46,6 +69,8 @@ class VpnStatus {
         "byte_out": byteOut,
         "packets_in": packetsIn,
         "packets_out": packetsOut,
+        "windows_driver": windowsDriver,
+        "windows_connect_mode": windowsConnectMode,
       };
 
   @override

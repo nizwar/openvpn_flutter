@@ -1,74 +1,135 @@
-name: Openvpn_flutter
-on: push
+name: release-with-android-and-windows-prebuilt
+
+on:
+  push:
+    branches:
+      - master
+      - dev_branch
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Flutter Artifacts
+  build-android-apks:
+    name: Build Android APKs
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [documentation, apks]
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        if: matrix.target != 'documentation'
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
-          distribution: 'adopt'
-          java-version: '21.x'
+          distribution: temurin
+          java-version: "21"
 
       - name: Install Flutter SDK
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: stable
 
-      - name: Flutter pub get
+      - name: Flutter pub get (root)
         run: flutter pub get
 
-      - name: Build Documentation
-        if: matrix.target == 'documentation'
-        run: |
-          flutter pub global activate dartdoc
-          flutter pub global run dartdoc
+      - name: Flutter pub get (example)
+        run: flutter pub get
+        working-directory: example
 
-      - name: Build APKs (Split by ABI)
-        if: matrix.target == 'apks'
-        run: cd example && flutter build apk --release --split-per-abi
- 
-      - name: Upload artifacts
-        if: matrix.target == 'apks' || matrix.target == 'appbundle'
+      - name: Build APKs (split per ABI)
+        run: flutter build apk --release --split-per-abi
+        working-directory: example
+
+      - name: Upload Android APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: publish-artifacts-${{ matrix.target }}
+          name: publish-artifacts-apks
+          path: example/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          overwrite: true
+
+  build-windows-prebuilt:
+    name: Build Windows Rust prebuilt
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Rust release artifacts
+        run: cargo build --manifest-path windows/rust/Cargo.toml --target x86_64-pc-windows-msvc --release
+
+      - name: Sync generated artifacts to prebuilt
+        shell: pwsh
+        run: |
+          $targetDir = "windows/rust/target/x86_64-pc-windows-msvc/release"
+          $prebuiltDir = "windows/rust/prebuilt/x86_64-pc-windows-msvc/release"
+          New-Item -ItemType Directory -Force -Path $prebuiltDir | Out-Null
+
+          Copy-Item "$targetDir/openvpn_flutter_rust.dll" "$prebuiltDir/openvpn_flutter_rust.dll" -Force
+
+          if (Test-Path "$targetDir/openvpn_flutter_rust.dll.lib") {
+            Copy-Item "$targetDir/openvpn_flutter_rust.dll.lib" "$prebuiltDir/openvpn_flutter_rust.dll.lib" -Force
+          } elseif (Test-Path "$targetDir/openvpn_flutter_rust.lib") {
+            Copy-Item "$targetDir/openvpn_flutter_rust.lib" "$prebuiltDir/openvpn_flutter_rust.lib" -Force
+          } else {
+            throw "Rust import library not found in $targetDir"
+          }
+
+      - name: Upload Windows prebuilt artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-artifacts-windows-prebuilt
           path: |
-            build/app/outputs/flutter-apk/*.apk
+            windows/rust/prebuilt/x86_64-pc-windows-msvc/release/openvpn_flutter_rust.dll
+            windows/rust/prebuilt/x86_64-pc-windows-msvc/release/openvpn_flutter_rust.dll.lib
+            windows/rust/prebuilt/x86_64-pc-windows-msvc/release/openvpn_flutter_rust.lib
           if-no-files-found: ignore
           overwrite: true
 
   publish:
-    name: Publish the binaries
-    needs: build
+    name: Publish release on tag
+    needs:
+      - build-android-apks
+      - build-windows-prebuilt
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2 
+    permissions:
+      contents: write
 
-      - name: Get project version
-        id: project_version
-        uses: its404/get-flutter-version@v1.0.0
-        
-      - name: Download apks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Android APK artifacts
         uses: actions/download-artifact@v4
         with:
           name: publish-artifacts-apks
-          path: build/app/outputs/flutter-apk
- 
-      - name: Release Binary
+          path: release-assets/apks
+
+      - name: Download Windows prebuilt artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: publish-artifacts-windows-prebuilt
+          path: release-assets/windows-prebuilt
+
+      - name: Show release assets
+        run: ls -R release-assets
+
+      - name: Publish GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "build/app/outputs/bundle/release/*.aab, build/app/outputs/flutter-apk/*.apk"
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: v${{ steps.project_version.outputs.version_number }}+${{steps.project_version.outputs.build_number}}-${{github.run_number}}
-          name: "Release ${{ steps.project_version.outputs.version_number }}+${{steps.project_version.outputs.build_number}}"
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          artifacts: |
+            release-assets/apks/*.apk
+            release-assets/windows-prebuilt/*
           generateReleaseNotes: true
+          allowUpdates: true

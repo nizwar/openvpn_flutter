@@ -1,0 +1,30 @@
+[package]
+name = "openvpn_flutter_rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "openvpn_flutter_rust"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Pour la gestion des processus (Runtime + I/O + process)
+tokio = { version = "1.35", features = ["rt-multi-thread", "process", "io-util", "sync", "time"] }
+# Pour la gestion des fichiers et chemins
+# std::fs et std::path sont suffisants, mais on peut ajouter des helpers
+# Pour la gestion des erreurs
+anyhow = "1.0"
+thiserror = "1.0"
+# Pour la sérialisation JSON si nécessaire
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Pour les fichiers temporaires
+tempfile = "3.8"
+# Pour la conversion de dates/timestamps
+chrono = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+

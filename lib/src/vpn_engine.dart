@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'model/vpn_status.dart';
+import 'windows_binary_manager.dart';
+import 'windows_driver_manager.dart';
 
 ///Stages of vpn connections
 enum VPNStage {
@@ -54,6 +57,7 @@ class OpenVPN {
   ///
   ///I know it was bad practice, but this is the only way to avoid android status duration having long delay
   Timer? _vpnStatusTimer;
+  Timer? _windowsStageTimer;
 
   ///To indicate the engine already initialize
   bool initialized = false;
@@ -98,14 +102,42 @@ class OpenVPN {
               localizedDescription != null,
           "These values are required for ios.");
     }
+
+    // For Windows, ensure runtime binaries and kernel drivers (DCO/TAP) are ready.
+    String? binaryPath;
+    if (Platform.isWindows) {
+      try {
+        binaryPath = await WindowsBinaryManager.ensureBinary();
+        await WindowsDriverManager.ensureDriversDeployed(
+          onProgress: (progress) {
+            debugPrint(
+              '[OpenVPN] Driver deploy progress: ${(progress * 100).toStringAsFixed(1)}%',
+            );
+          },
+        );
+      } catch (e) {
+        throw Exception("Failed to prepare OpenVPN runtime on Windows: $e. "
+            "Please check your internet connection and try again.");
+      }
+    }
+
     onVpnStatusChanged?.call(VpnStatus.empty());
     initialized = true;
     _initializeListener();
-    return _channelControl.invokeMethod("initialize", {
+
+    // Prepare arguments for initialize
+    final Map<String, dynamic> args = {
       "groupIdentifier": groupIdentifier,
       "providerBundleIdentifier": providerBundleIdentifier,
       "localizedDescription": localizedDescription,
-    }).then((value) {
+    };
+
+    // For Windows, add the binary path
+    if (Platform.isWindows && binaryPath != null) {
+      args["binaryPath"] = binaryPath;
+    }
+
+    return _channelControl.invokeMethod("initialize", args).then((value) {
       Future.wait([
         status().then((value) => lastStatus?.call(value)),
         stage().then((value) {
@@ -155,6 +187,8 @@ class OpenVPN {
   void disconnect() {
     _tempDateTime = null;
     _channelControl.invokeMethod("disconnect");
+    _windowsStageTimer?.cancel();
+    _windowsStageTimer = null;
     if (_vpnStatusTimer?.isActive ?? false) {
       _vpnStatusTimer?.cancel();
       _vpnStatusTimer = null;
@@ -211,6 +245,44 @@ class OpenVPN {
               byteOut: byteOut,
               packetsIn: byteIn,
               packetsOut: byteOut,
+            );
+          } else if (Platform.isWindows) {
+            // Windows format: JSON similar to Android
+            var data = jsonDecode(value);
+            var connectedOn =
+                data["connected_on"] != null && data["connected_on"] != "null"
+                    ? DateTime.tryParse(data["connected_on"].toString())
+                    : null;
+            connectedOn ??= _tempDateTime ?? DateTime.now();
+
+            String byteIn =
+                data["byte_in"] != null ? data["byte_in"].toString() : "0";
+            String byteOut =
+                data["byte_out"] != null ? data["byte_out"].toString() : "0";
+            String packetsIn = data["packets_in"] != null
+                ? data["packets_in"].toString()
+                : "0";
+            String packetsOut = data["packets_out"] != null
+                ? data["packets_out"].toString()
+                : "0";
+
+            if (byteIn.trim().isEmpty) byteIn = "0";
+            if (byteOut.trim().isEmpty) byteOut = "0";
+            if (packetsIn.trim().isEmpty) packetsIn = "0";
+            if (packetsOut.trim().isEmpty) packetsOut = "0";
+
+            final windowsDriver = data["windows_driver"]?.toString();
+            final windowsConnectMode = data["windows_connect_mode"]?.toString();
+
+            return VpnStatus(
+              connectedOn: connectedOn,
+              duration: _duration(DateTime.now().difference(connectedOn).abs()),
+              byteIn: byteIn,
+              byteOut: byteOut,
+              packetsIn: packetsIn,
+              packetsOut: packetsOut,
+              windowsDriver: windowsDriver,
+              windowsConnectMode: windowsConnectMode,
             );
           } else {
             throw Exception("Openvpn not supported on this platform");
@@ -282,6 +354,25 @@ class OpenVPN {
 
   ///Initialize listener, called when you start connection and stoped while
   void _initializeListener() {
+    if (Platform.isWindows) {
+      _windowsStageTimer?.cancel();
+      _windowsStageTimer =
+          Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+        final vpnStage = await stage();
+        if (vpnStage != _lastStage) {
+          onVpnStageChanged?.call(vpnStage, vpnStage.name);
+          _lastStage = vpnStage;
+        }
+        if (vpnStage != VPNStage.disconnected) {
+          _createTimer();
+        } else {
+          _vpnStatusTimer?.cancel();
+          _vpnStatusTimer = null;
+        }
+      });
+      return;
+    }
+
     _vpnStageSnapshot().listen((event) {
       var vpnStage = _strToStage(event);
       if (vpnStage != _lastStage) {
@@ -289,24 +380,22 @@ class OpenVPN {
         _lastStage = vpnStage;
       }
       if (vpnStage != VPNStage.disconnected) {
-        if (Platform.isAndroid) {
+        if (Platform.isAndroid || Platform.isWindows) {
           _createTimer();
         } else if (Platform.isIOS && vpnStage == VPNStage.connected) {
           _createTimer();
         }
       } else {
         _vpnStatusTimer?.cancel();
+        _vpnStatusTimer = null;
       }
     });
   }
 
-  ///Create timer to invoke status
+  ///Create timer to invoke status (no-op if already running)
   void _createTimer() {
-    if (_vpnStatusTimer != null) {
-      _vpnStatusTimer!.cancel();
-      _vpnStatusTimer = null;
-    }
-    _vpnStatusTimer ??=
+    if (_vpnStatusTimer != null) return;
+    _vpnStatusTimer =
         Timer.periodic(const Duration(seconds: 1), (timer) async {
       onVpnStatusChanged?.call(await status());
     });

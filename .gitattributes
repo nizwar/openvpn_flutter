@@ -1,0 +1,3 @@
+# Signed driver packages: the .cat catalog hashes the exact bytes of the .inf,
+# so any line-ending normalization would invalidate the signature.
+assets/openvpn/windows/** -text
