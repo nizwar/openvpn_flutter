@@ -162,6 +162,80 @@ fn driver_strategy_label(strategy: DriverStrategy) -> &'static str {
     }
 }
 
+const PREFERRED_DRIVER_FILE: &str = "preferred_driver.txt";
+const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
+
+/// Kernel arch folder under `LavControl/OpenVPN` (`x64` or `arm64`), matching
+/// the Dart [WindowsBinaryManager] layout.
+#[cfg(target_os = "windows")]
+fn windows_kernel_arch_folder() -> &'static str {
+    unsafe {
+        extern "system" {
+            fn GetCurrentProcess() -> *mut std::ffi::c_void;
+            fn IsWow64Process2(
+                hProcess: *mut std::ffi::c_void,
+                pProcessMachine: *mut u16,
+                pNativeMachine: *mut u16,
+            ) -> i32;
+        }
+        let mut process_machine: u16 = 0;
+        let mut native_machine: u16 = 0;
+        let ok = IsWow64Process2(
+            GetCurrentProcess(),
+            &mut process_machine,
+            &mut native_machine,
+        );
+        if ok != 0 && native_machine == IMAGE_FILE_MACHINE_ARM64 {
+            return "arm64";
+        }
+    }
+    "x64"
+}
+
+#[cfg(not(target_os = "windows"))]
+fn windows_kernel_arch_folder() -> &'static str {
+    "x64"
+}
+
+/// Reads `preferred_driver.txt` next to the config directory (machine runtime
+/// root). Returns `ovpn-dco`, `tap-windows6`, or `None` when absent/unknown.
+fn read_preferred_driver(config_dir: &PathBuf) -> Option<String> {
+    let marker = config_dir
+        .parent()
+        .map(|p| p.join(PREFERRED_DRIVER_FILE))?;
+    let content = std::fs::read_to_string(&marker).ok()?;
+    let value = content.trim().to_ascii_lowercase();
+    match value.as_str() {
+        "ovpn-dco" | "tap-windows6" => {
+            diag_log_to_file(&format!(
+                "[RUST_CONNECT] preferred_driver={} path=\"{}\"",
+                value,
+                marker.display()
+            ));
+            Some(value)
+        }
+        other if !other.is_empty() => {
+            diag_log_to_file(&format!(
+                "[RUST_CONNECT] preferred_driver unknown=\"{}\" path=\"{}\"",
+                other,
+                marker.display()
+            ));
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Service-mode driver attempts: marker forces a single strategy; absent marker
+/// keeps the historical DCO-then-TAP fallback.
+fn service_driver_strategies(preferred: Option<&str>) -> Vec<DriverStrategy> {
+    match preferred {
+        Some("ovpn-dco") => vec![DriverStrategy::OvpnDco],
+        Some("tap-windows6") => vec![DriverStrategy::TapWindows6],
+        _ => vec![DriverStrategy::OvpnDco, DriverStrategy::TapWindows6],
+    }
+}
+
 fn is_dco_failure_line(line: &str) -> bool {
     let l = line.to_lowercase();
     if l.contains("cannot allocate tun/tap") {
@@ -391,12 +465,16 @@ impl OpenVpnManager {
 
     /// Runtime directories for configs/logs shared with the Interactive Service.
     /// Must live under ProgramData so LocalSystem can access them.
+    /// Layout mirrors Dart: `LavControl/OpenVPN/<arch>/{config,log,status}`.
     fn runtime_dirs(&self) -> (PathBuf, PathBuf, PathBuf) {
         #[cfg(target_os = "windows")]
         {
+            let arch = windows_kernel_arch_folder();
             let base = std::env::var("ProgramData")
-                .map(|p| PathBuf::from(p).join("LavControl").join("OpenVPN"))
-                .unwrap_or_else(|_| PathBuf::from(r"C:\ProgramData\LavControl\OpenVPN"));
+                .map(|p| PathBuf::from(p).join("LavControl").join("OpenVPN").join(arch))
+                .unwrap_or_else(|_| {
+                    PathBuf::from(format!(r"C:\ProgramData\LavControl\OpenVPN\{}", arch))
+                });
             return (
                 base.join("config"),
                 base.join("log"),
@@ -524,6 +602,8 @@ impl OpenVpnManager {
 
         let mut used_service = false;
         let mut active_driver = DriverStrategy::OvpnDco;
+        let preferred_driver = read_preferred_driver(&config_dir);
+        let preferred_ref = preferred_driver.as_deref();
 
         if service_available {
             let log_file_path = log_dir.join(format!("openvpn_log_{}.txt", ts));
@@ -532,8 +612,9 @@ impl OpenVpnManager {
             }
 
             let working_dir = config_dir.to_string_lossy().to_string();
-            let strategies = [DriverStrategy::OvpnDco, DriverStrategy::TapWindows6];
+            let strategies = service_driver_strategies(preferred_ref);
             let mut connected = false;
+            let allow_dco_to_tap_fallback = preferred_ref.is_none();
 
             for (idx, strategy) in strategies.iter().enumerate() {
                 if idx > 0 {
@@ -603,7 +684,8 @@ impl OpenVpnManager {
                                 break;
                             }
                             ConnectOutcome::DriverFailed
-                                if *strategy == DriverStrategy::OvpnDco =>
+                                if *strategy == DriverStrategy::OvpnDco
+                                    && allow_dco_to_tap_fallback =>
                             {
                                 stop_service_process(pid, response.pipe).await;
                                 diag_log_to_file(
@@ -623,7 +705,7 @@ impl OpenVpnManager {
                             driver_strategy_label(*strategy),
                             e
                         ));
-                        if *strategy == DriverStrategy::OvpnDco {
+                        if *strategy == DriverStrategy::OvpnDco && allow_dco_to_tap_fallback {
                             continue;
                         }
                         *self.log_file.lock().unwrap() = None;
@@ -637,7 +719,15 @@ impl OpenVpnManager {
         }
 
         // ── 4. Fallback: direct launch (TAP only — DCO needs service) ───
+        // Skip when the install marker says ovpn-dco: no TAP adapter was created.
         if !used_service {
+            if preferred_ref == Some("ovpn-dco") {
+                return Err(OpenVpnError::ProcessExecutionFailed(
+                    "OpenVPN Interactive Service unavailable and preferred_driver=ovpn-dco; \
+                     refusing TAP direct fallback (no TAP adapter)"
+                        .to_string(),
+                ));
+            }
             let processed = preprocess_config_for_driver(config, DriverStrategy::TapWindows6);
             std::fs::write(&config_file, &processed).map_err(OpenVpnError::IoError)?;
             self.connect_direct(

@@ -1,5 +1,7 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show FlutterError, debugPrint;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
@@ -7,21 +9,74 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart' show sha256;
 
+/// IMAGE_FILE_MACHINE_ARM64 — native machine returned by [IsWow64Process2].
+const int imageFileMachineArm64 = 0xAA64;
+
+/// IMAGE_FILE_MACHINE_AMD64 — PE machine for x64 kernel drivers.
+const int imageFileMachineAmd64 = 0x8664;
+
+/// Maps an [IsWow64Process2] native-machine value to the OpenVPN asset bundle
+/// folder (`arm64` or `x64`). Pure function — unit-tested without FFI.
+String bundleArchForNativeMachine(int nativeMachine) {
+  if (nativeMachine == imageFileMachineArm64) {
+    return 'arm64';
+  }
+  return 'x64';
+}
+
 /// Manages download, verification and storage of openvpn.exe for Windows
 class WindowsBinaryManager {
   /// Target OpenVPN version (to be updated according to official releases)
   /// See: https://github.com/OpenVPN/openvpn/releases
   static const String targetVersion = '2.7.5';
 
-  /// Windows OS architecture identifier used to select the correct native
-  /// binary set ('x64' or 'arm64').
+  static String? _cachedWindowsArch;
+  static int? _cachedNativeMachine;
+  static int? _cachedProcessMachine;
+
+  /// Windows OS (kernel) architecture used to select native binaries and
+  /// drivers (`x64` or `arm64`).
   ///
-  /// A 64-bit (x64) process running under emulation on Windows on ARM reports
-  /// `PROCESSOR_ARCHITECTURE=AMD64`, but the *native* OS architecture is
-  /// exposed through `PROCESSOR_ARCHITEW6432`. Kernel drivers (ovpn-dco, TAP) and
-  /// OpenSSL/OpenVPN native binaries must match the OS architecture, so we
-  /// always resolve the OS arch, not the (possibly emulated) process arch.
+  /// Resolved via [IsWow64Process2] so an x64 process under emulation on
+  /// Windows on ARM still picks the ARM64 driver/OpenVPN bundle. The Flutter
+  /// app and Rust DLL remain x64 (process arch); only openvpn.exe, OpenSSL
+  /// DLLs, tapctl and kernel drivers follow the kernel.
   static String get windowsArch {
+    return _cachedWindowsArch ??= _resolveWindowsArch();
+  }
+
+  /// Native machine value from the last [IsWow64Process2] query (cached).
+  static int? get nativeMachine => _cachedNativeMachine;
+
+  /// Process machine value from the last [IsWow64Process2] query (cached).
+  static int? get processMachine => _cachedProcessMachine;
+
+  /// Expected PE `Machine` for `.sys` drivers that must match the kernel.
+  static int get expectedDriverPeMachine =>
+      windowsArch == 'arm64' ? imageFileMachineArm64 : imageFileMachineAmd64;
+
+  static String _resolveWindowsArch() {
+    if (!Platform.isWindows) {
+      return 'x64';
+    }
+    try {
+      final machines = _queryWow64Machines();
+      if (machines != null) {
+        _cachedProcessMachine = machines[0];
+        _cachedNativeMachine = machines[1];
+        return bundleArchForNativeMachine(machines[1]);
+      }
+    } catch (e) {
+      debugPrint(
+        '[WindowsBinaryManager] IsWow64Process2 failed ($e); '
+        'falling back to environment',
+      );
+    }
+    return _windowsArchFromEnvironment();
+  }
+
+  /// Fallback when [IsWow64Process2] is unavailable (pre-Windows 10 1709).
+  static String _windowsArchFromEnvironment() {
     final effective =
         (Platform.environment['PROCESSOR_ARCHITEW6432'] ??
                 Platform.environment['PROCESSOR_ARCHITECTURE'] ??
@@ -31,6 +86,33 @@ class WindowsBinaryManager {
       return 'arm64';
     }
     return 'x64';
+  }
+
+  /// Returns `[processMachine, nativeMachine]` or null on API failure.
+  static List<int>? _queryWow64Machines() {
+    final kernel32 = DynamicLibrary.open('kernel32.dll');
+    final getCurrentProcess = kernel32.lookupFunction<IntPtr Function(),
+        int Function()>('GetCurrentProcess');
+    final isWow64Process2 = kernel32.lookupFunction<
+        Int32 Function(IntPtr, Pointer<Uint16>, Pointer<Uint16>),
+        int Function(int, Pointer<Uint16>, Pointer<Uint16>)>('IsWow64Process2');
+
+    final processMachine = calloc<Uint16>();
+    final nativeMachine = calloc<Uint16>();
+    try {
+      final ok = isWow64Process2(
+        getCurrentProcess(),
+        processMachine,
+        nativeMachine,
+      );
+      if (ok == 0) {
+        return null;
+      }
+      return <int>[processMachine.value, nativeMachine.value];
+    } finally {
+      calloc.free(processMachine);
+      calloc.free(nativeMachine);
+    }
   }
 
   /// Path to the embedded OpenVPN binary asset inside the Flutter bundle,
@@ -106,7 +188,12 @@ class WindowsBinaryManager {
   /// Subfolder for OpenVPN status files.
   static const String statusSubdir = 'status';
 
+  /// Preferred driver marker written by elevated driver setup (`ovpn-dco` or
+  /// `tap-windows6`). Absent on installs that predate the marker.
+  static const String preferredDriverFileName = 'preferred_driver.txt';
+
   /// Machine-wide OpenVPN root under `%ProgramData%` (accessible to LocalSystem).
+  /// Actual runtime paths append [windowsArch] (`LavControl/OpenVPN/<arch>`).
   static const String machineRuntimeFolder = 'LavControl/OpenVPN';
 
   /// Version file name
@@ -143,10 +230,12 @@ class WindowsBinaryManager {
   /// embedded asset or downloading anything.
   static const String overrideEnvVar = 'OPENVPN_WINDOWS_BINARY_OVERRIDE';
 
-  /// Gets the storage directory for openvpn.exe
+  /// Gets the storage directory for openvpn.exe (per-user staging, per arch).
   static Future<Directory> _getStorageDirectory() async {
     final appSupportDir = await getApplicationSupportDirectory();
-    final openvpnDir = Directory(path.join(appSupportDir.path, 'openvpn'));
+    final openvpnDir = Directory(
+      path.join(appSupportDir.path, 'openvpn', windowsArch),
+    );
     if (!await openvpnDir.exists()) {
       await openvpnDir.create(recursive: true);
     }
@@ -157,11 +246,18 @@ class WindowsBinaryManager {
   static Future<Directory> getRuntimeDirectory() => _getStorageDirectory();
 
   /// Machine-wide directory for the Interactive Service and shared config/log.
+  ///
+  /// Layout: `%ProgramData%/LavControl/OpenVPN/<arch>` so an ARM host that
+  /// previously staged x64 binaries does not reuse them.
   static Future<String> getMachineRuntimeDirectory() async {
     final programData =
         Platform.environment['ProgramData'] ?? r'C:\ProgramData';
     final dir = Directory(
-      path.joinAll([programData, ...machineRuntimeFolder.split('/')]),
+      path.joinAll([
+        programData,
+        ...machineRuntimeFolder.split('/'),
+        windowsArch,
+      ]),
     );
     if (!await dir.exists()) {
       try {
@@ -171,6 +267,12 @@ class WindowsBinaryManager {
       }
     }
     return dir.path;
+  }
+
+  /// Full path to [preferredDriverFileName] under the machine runtime dir.
+  static Future<String> getPreferredDriverMarkerPath() async {
+    final machineDir = await getMachineRuntimeDirectory();
+    return path.join(machineDir, preferredDriverFileName);
   }
 
   /// Directory approved by the Interactive Service for `.ovpn` configs.

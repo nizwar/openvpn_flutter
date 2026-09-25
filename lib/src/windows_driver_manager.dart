@@ -158,9 +158,11 @@ class WindowsDriverManager {
 
   /// PowerShell fragment for elevated adapter/driver setup via tapctl.
   ///
-  /// Driver packages may be bundled under
-  /// `assets/openvpn/windows/<arch>/drivers/` (installed with pnputil before
-  /// tapctl create). Failures here must never abort OpenVPN service install.
+  /// Installs ovpn-dco first on every OS (win10/win11 flavor by build). TAP
+  /// packages stay in the bundle for fallback only: the tap0901 adapter is
+  /// created when `tapctl list` shows no ovpn-dco adapter after DCO setup.
+  /// Writes [WindowsBinaryManager.preferredDriverFileName] and throws when
+  /// neither adapter is present.
   ///
   /// This fragment is inlined into the host's elevated script, which provides
   /// `Log-Step`. Function names defined here must not collide with the host's
@@ -172,6 +174,14 @@ class WindowsDriverManager {
   }) {
     final staging = stagingDir.replaceAll("'", "''");
     final machine = machineDir.replaceAll("'", "''");
+    final bundleArch = WindowsBinaryManager.windowsArch;
+    final processMachine =
+        WindowsBinaryManager.processMachine?.toRadixString(16) ?? 'unknown';
+    final nativeMachine =
+        WindowsBinaryManager.nativeMachine?.toRadixString(16) ?? 'unknown';
+    final expectedPe =
+        WindowsBinaryManager.expectedDriverPeMachine.toRadixString(16);
+    final markerName = WindowsBinaryManager.preferredDriverFileName;
     return '''
 function Invoke-DriverToolLogged {
   param(
@@ -203,15 +213,49 @@ function Get-OvpnDcoOsFlavor {
   return 'win10'
 }
 
+function Get-PeMachine {
+  param([string]\$SysPath)
+  try {
+    \$bytes = [System.IO.File]::ReadAllBytes(\$SysPath)
+    if (\$bytes.Length -lt 0x40) { return 0 }
+    \$peOffset = [BitConverter]::ToInt32(\$bytes, 0x3C)
+    if ((\$peOffset + 6) -gt \$bytes.Length) { return 0 }
+    if (\$bytes[\$peOffset] -ne 0x50 -or \$bytes[\$peOffset + 1] -ne 0x45) { return 0 }
+    return [int][BitConverter]::ToUInt16(\$bytes, \$peOffset + 4)
+  } catch {
+    return 0
+  }
+}
+
+function Assert-SysMatchesKernel {
+  param(
+    [string]\$Label,
+    [string]\$InfPath,
+    [int]\$ExpectedPe
+  )
+  \$sysName = if (\$Label -eq 'ovpn-dco') { 'ovpn-dco.sys' } else { 'tap0901.sys' }
+  \$sysPath = Join-Path (Split-Path -Parent \$InfPath) \$sysName
+  if (-not (Test-Path -LiteralPath \$sysPath)) {
+    throw "[LAVCONTROL] \$Label .sys missing next to INF: \$sysPath"
+  }
+  \$pe = Get-PeMachine -SysPath \$sysPath
+  Log-Step ("[LAVCONTROL] Arch check process=0x$processMachine native=0x$nativeMachine bundle=$bundleArch pe=0x{0:X} expected=0x$expectedPe sys=\$sysPath" -f \$pe)
+  if (\$pe -ne \$ExpectedPe) {
+    throw ("[LAVCONTROL] Refusing \$Label .sys PE machine 0x{0:X} (kernel expects 0x$expectedPe)" -f \$pe)
+  }
+}
+
 function Install-DriverPackageIfPresent {
   param(
     [string]\$Label,
-    [string]\$InfPath
+    [string]\$InfPath,
+    [int]\$ExpectedPe
   )
   if (-not (Test-Path -LiteralPath \$InfPath)) {
     Log-Step "[LAVCONTROL] \$Label driver package missing: \$InfPath"
     return \$false
   }
+  Assert-SysMatchesKernel -Label \$Label -InfPath \$InfPath -ExpectedPe \$ExpectedPe
   Log-Step "[LAVCONTROL] Installing \$Label driver via pnputil: \$InfPath"
   Invoke-DriverToolLogged -Label "pnputil \$Label" -FilePath 'pnputil.exe' -ArgumentList @('/add-driver', \$InfPath, '/install') | Out-Null
   return \$true
@@ -227,7 +271,7 @@ function Invoke-TapCtlCreateWithRetry {
   )
   for (\$attempt = 1; \$attempt -le \$MaxAttempts; \$attempt++) {
     \$output = Invoke-DriverToolLogged -Label "\$Label attempt \$attempt/\$MaxAttempts" -FilePath \$TapCtl -ArgumentList \$ArgumentList
-    if (\$output -match '\{[0-9a-fA-F-]{36}\}') {
+    if (\$output -match '\\{[0-9a-fA-F-]{36}\\}') {
       Log-Step "[LAVCONTROL] \$Label succeeded on attempt \$attempt"
       return \$true
     }
@@ -244,45 +288,44 @@ function Invoke-TapCtlCreateWithRetry {
   return \$false
 }
 
-function Install-BundledDriverPackages {
+function Find-DriverInf {
   param(
     [string]\$StagingDir,
-    [string]\$MachineDir
+    [string]\$MachineDir,
+    [string]\$Relative,
+    [string]\$Fallback = \$null
   )
-  \$arch = '${WindowsBinaryManager.windowsArch}'
-  \$platform = if (\$arch -eq 'arm64') { 'arm64' } else { 'amd64' }
-  \$dcoFlavor = Get-OvpnDcoOsFlavor
-  \$installedAny = \$false
-
-  \$driverJobs = @(
-    @{ Label = 'ovpn-dco'; Relative = ("ovpn-dco/" + \$dcoFlavor + "/ovpn-dco.inf") },
-    @{ Label = 'tap-windows6'; Relative = ("tap/" + \$platform + "/win10/OemVista.inf"); Fallback = ("tap/" + \$platform + "/OemVista.inf") }
-  )
-  if (\$arch -eq 'arm64') {
-    # ARM: install TAP before DCO (TAP fallback is more reliable during bring-up).
-    \$driverJobs = @(\$driverJobs[1], \$driverJobs[0])
-  }
-
   foreach (\$root in @(
     (Join-Path \$StagingDir 'drivers'),
     (Join-Path \$MachineDir 'drivers')
   )) {
     if (-not (Test-Path \$root)) { continue }
-
-    foreach (\$job in \$driverJobs) {
-      \$inf = Join-Path \$root \$job.Relative
-      if (-not (Test-Path -LiteralPath \$inf) -and \$job.Fallback) {
-        \$inf = Join-Path \$root \$job.Fallback
-      }
-      if (Install-DriverPackageIfPresent -Label \$job.Label -InfPath \$inf) { \$installedAny = \$true }
+    \$inf = Join-Path \$root \$Relative
+    if (Test-Path -LiteralPath \$inf) { return \$inf }
+    if (\$Fallback) {
+      \$alt = Join-Path \$root \$Fallback
+      if (Test-Path -LiteralPath \$alt) { return \$alt }
     }
   }
+  return \$null
+}
 
-  if (\$installedAny) {
-    # Driver store / PnP stack needs a moment before tapctl can open DevRegKey (common on ARM).
-    Start-Sleep -Seconds 3
-  }
-  return \$installedAny
+function Test-TapCtlAdapterPresent {
+  param(
+    [string]\$ListOutput,
+    [string]\$Pattern
+  )
+  return [bool](\$ListOutput -match \$Pattern)
+}
+
+function Write-PreferredDriverMarker {
+  param(
+    [string]\$MachineDir,
+    [string]\$Driver
+  )
+  \$marker = Join-Path \$MachineDir '$markerName'
+  Set-Content -LiteralPath \$marker -Value \$Driver -Encoding ascii -NoNewline
+  Log-Step "[LAVCONTROL] Wrote preferred driver marker: \$marker = \$Driver"
 }
 
 function Install-OpenVpnDrivers {
@@ -290,6 +333,13 @@ function Install-OpenVpnDrivers {
     [string]\$StagingDir,
     [string]\$MachineDir
   )
+  \$arch = '$bundleArch'
+  \$platform = if (\$arch -eq 'arm64') { 'arm64' } else { 'amd64' }
+  \$expectedPe = [int]"0x$expectedPe"
+  \$dcoFlavor = Get-OvpnDcoOsFlavor
+
+  Log-Step "[LAVCONTROL] Arch process=0x$processMachine native=0x$nativeMachine bundle=$bundleArch expectedPe=0x$expectedPe dcoFlavor=\$dcoFlavor"
+
   \$driversStaging = Join-Path \$StagingDir 'drivers'
   \$driversMachine = Join-Path \$MachineDir 'drivers'
   if (Test-Path \$driversStaging) {
@@ -297,12 +347,6 @@ function Install-OpenVpnDrivers {
     Copy-Item -Path (Join-Path \$driversStaging '*') -Destination \$driversMachine -Recurse -Force -ErrorAction SilentlyContinue
     Log-Step "[LAVCONTROL] Driver packages copied to \$driversMachine"
   }
-
-  Install-BundledDriverPackages -StagingDir \$StagingDir -MachineDir \$MachineDir | Out-Null
-
-  \$nativeArch = \$env:PROCESSOR_ARCHITECTURE
-  \$wowArch = \$env:PROCESSOR_ARCHITEW6432
-  Log-Step "[LAVCONTROL] Host arch PROCESSOR_ARCHITECTURE=\$nativeArch PROCESSOR_ARCHITEW6432=\$wowArch bundleArch=${WindowsBinaryManager.windowsArch}"
 
   \$tapctlStaging = Join-Path \$StagingDir 'tapctl.exe'
   if (-not (Test-Path \$tapctlStaging)) {
@@ -316,43 +360,72 @@ function Install-OpenVpnDrivers {
     Copy-Item -Path \$tapctlStaging -Destination \$tapctl -Force
     Log-Step "[LAVCONTROL] tapctl.exe deployed to \$tapctl"
   } elseif (-not (Test-Path \$tapctl)) {
-    Log-Step "[LAVCONTROL] tapctl.exe missing; skipping adapter creation"
+    throw "[LAVCONTROL] tapctl.exe missing; cannot create VPN adapters"
+  }
+
+  \$list = Invoke-DriverToolLogged -Label 'tapctl list (before)' -FilePath \$tapctl -ArgumentList @('list')
+  Log-Step "[LAVCONTROL] tapctl list before install:`n\$list"
+
+  # --- DCO first (every OS / arch) ---
+  \$dcoInf = Find-DriverInf -StagingDir \$StagingDir -MachineDir \$MachineDir `
+    -Relative ("ovpn-dco/" + \$dcoFlavor + "/ovpn-dco.inf")
+  if (\$dcoInf) {
+    Install-DriverPackageIfPresent -Label 'ovpn-dco' -InfPath \$dcoInf -ExpectedPe \$expectedPe | Out-Null
+    Start-Sleep -Seconds 3
+  } else {
+    Log-Step "[LAVCONTROL] ovpn-dco INF not found for flavor \$dcoFlavor"
+  }
+
+  if (-not (Test-TapCtlAdapterPresent -ListOutput \$list -Pattern 'ovpn-dco|Data Channel Offload')) {
+    Log-Step "[LAVCONTROL] Creating ovpn-dco adapter (Win-DCO)"
+    \$dcoRetry = @{ TapCtl = \$tapctl; Label = 'tapctl create ovpn-dco'; ArgumentList = @(
+      'create', '--hwid', 'ovpn-dco', '--name', 'OpenVPN Data Channel Offload'
+    ) }
+    if (\$arch -eq 'arm64') {
+      \$dcoRetry.MaxAttempts = 8
+      \$dcoRetry.DelaySeconds = 3
+    }
+    Invoke-TapCtlCreateWithRetry @dcoRetry | Out-Null
+  }
+
+  \$list = Invoke-DriverToolLogged -Label 'tapctl list (after DCO)' -FilePath \$tapctl -ArgumentList @('list')
+  if (Test-TapCtlAdapterPresent -ListOutput \$list -Pattern 'ovpn-dco|Data Channel Offload') {
+    Write-PreferredDriverMarker -MachineDir \$MachineDir -Driver 'ovpn-dco'
+    Log-Step "[LAVCONTROL] ovpn-dco adapter present; skipping TAP creation"
     return
   }
 
-  \$dcoList = Invoke-DriverToolLogged -Label 'tapctl list (before)' -FilePath \$tapctl -ArgumentList @('list')
-  Log-Step "[LAVCONTROL] tapctl list before install:`n\$dcoList"
-
-  function New-DcoAdapter {
-    Log-Step "[LAVCONTROL] Creating ovpn-dco adapter (Win-DCO)"
-    Invoke-TapCtlCreateWithRetry -TapCtl \$tapctl -Label 'tapctl create ovpn-dco' -ArgumentList @(
-      'create', '--hwid', 'ovpn-dco', '--name', 'OpenVPN Data Channel Offload'
-    ) | Out-Null
+  # --- TAP fallback only when DCO adapter is absent ---
+  Log-Step "[LAVCONTROL] ovpn-dco adapter absent; installing tap-windows6 fallback"
+  \$tapInf = Find-DriverInf -StagingDir \$StagingDir -MachineDir \$MachineDir `
+    -Relative ("tap/" + \$platform + "/win10/OemVista.inf") `
+    -Fallback ("tap/" + \$platform + "/OemVista.inf")
+  if (\$tapInf) {
+    Install-DriverPackageIfPresent -Label 'tap-windows6' -InfPath \$tapInf -ExpectedPe \$expectedPe | Out-Null
+    Start-Sleep -Seconds 3
+  } else {
+    Log-Step "[LAVCONTROL] tap-windows6 INF not found for platform \$platform"
   }
 
-  function New-TapAdapter {
+  if (-not (Test-TapCtlAdapterPresent -ListOutput \$list -Pattern 'tap0901|TAP-Windows6')) {
     Log-Step "[LAVCONTROL] Creating tap-windows6 adapter (fallback)"
-    \$retryArgs = @{ TapCtl = \$tapctl; Label = 'tapctl create tap0901'; ArgumentList = @(
+    \$tapRetry = @{ TapCtl = \$tapctl; Label = 'tapctl create tap0901'; ArgumentList = @(
       'create', '--hwid', 'tap0901', '--name', 'OpenVPN TAP-Windows6'
     ) }
-    if ('${WindowsBinaryManager.windowsArch}' -eq 'arm64') {
-      \$retryArgs.MaxAttempts = 8
-      \$retryArgs.DelaySeconds = 3
+    if (\$arch -eq 'arm64') {
+      \$tapRetry.MaxAttempts = 8
+      \$tapRetry.DelaySeconds = 3
     }
-    Invoke-TapCtlCreateWithRetry @retryArgs | Out-Null
+    Invoke-TapCtlCreateWithRetry @tapRetry | Out-Null
   }
 
-  if ('${WindowsBinaryManager.windowsArch}' -eq 'arm64') {
-    if (\$dcoList -notmatch 'tap0901|TAP-Windows6') { New-TapAdapter }
-    \$dcoList = Invoke-DriverToolLogged -Label 'tapctl list (mid)' -FilePath \$tapctl -ArgumentList @('list')
-    if (\$dcoList -notmatch 'ovpn-dco|Data Channel Offload') { New-DcoAdapter }
-  } else {
-    if (\$dcoList -notmatch 'ovpn-dco|Data Channel Offload') { New-DcoAdapter }
-    \$dcoList = Invoke-DriverToolLogged -Label 'tapctl list (mid)' -FilePath \$tapctl -ArgumentList @('list')
-    if (\$dcoList -notmatch 'tap0901|TAP-Windows6') { New-TapAdapter }
+  \$list = Invoke-DriverToolLogged -Label 'tapctl list (after TAP)' -FilePath \$tapctl -ArgumentList @('list')
+  if (Test-TapCtlAdapterPresent -ListOutput \$list -Pattern 'tap0901|TAP-Windows6') {
+    Write-PreferredDriverMarker -MachineDir \$MachineDir -Driver 'tap-windows6'
+    return
   }
 
-  Invoke-DriverToolLogged -Label 'tapctl list (after)' -FilePath \$tapctl -ArgumentList @('list') | Out-Null
+  throw "[LAVCONTROL] No VPN adapter available after DCO and TAP setup. tapctl list:`n\$list"
 }
 
 Install-OpenVpnDrivers -StagingDir '$staging' -MachineDir '$machine'
