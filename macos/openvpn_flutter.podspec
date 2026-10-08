@@ -13,7 +13,8 @@ OpenVPN for flutter
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Laskarmedia' => 'nizwar@laskarmedia.id' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  # Keep CocoaPods and Swift Package Manager building the same source tree.
+  s.source_files = 'openvpn_flutter/Sources/openvpn_flutter/**/*'
   s.dependency 'FlutterMacOS'
 
   # 10.15. NETunnelProviderManager itself is older, but a packet tunnel on a
