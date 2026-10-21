@@ -11,6 +11,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -69,10 +70,22 @@ void main() {
   });
 
   testWidgets('rejects an invalid configuration', (tester) async {
-    await expectLater(
-      vpn.connect('this is not an openvpn configuration', 'invalid'),
-      throwsA(isA<PlatformException>()),
-    );
+    const invalid = 'this is not an openvpn configuration';
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // Android parses the configuration before starting.
+      await expectLater(
+        vpn.connect(invalid, 'invalid'),
+        throwsA(isA<PlatformException>()),
+      );
+    } else {
+      // On iOS and macOS the packet tunnel provider rejects it.
+      expect(await vpn.connect(invalid, 'invalid'), isTrue);
+      final end = await vpn.stageStream
+          .firstWhere((stage) => stage.isDisconnected)
+          .timeout(const Duration(seconds: 30));
+      expect(end, VPNStage.error);
+      expect(await vpn.lastError(), isNotNull);
+    }
     expect(await vpn.stage(), VPNStage.disconnected);
   });
 
