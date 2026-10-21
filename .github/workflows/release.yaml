@@ -1,0 +1,33 @@
+name: Release
+
+# Publishes the example app's APKs with the GitHub release of a version tag.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  apks:
+    name: Example APKs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build
+        working-directory: example
+        run: flutter build apk --release --split-per-abi -P openvpn.useJitpack=true
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: example/build/app/outputs/flutter-apk/*.apk
+          allowUpdates: true
+          generateReleaseNotes: true
+          omitBodyDuringUpdate: true

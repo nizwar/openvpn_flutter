@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dart:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test example/lib example/test example/integration_test
+      - run: flutter analyze
+      - run: flutter test
+      - run: cd example && flutter test
+      - run: flutter pub publish --dry-run
+
+  android:
+    name: Android (${{ matrix.engine }} engine)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [submodule, jitpack]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: ${{ matrix.engine == 'submodule' }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build the example
+        working-directory: example
+        run: flutter build apk --release ${{ matrix.engine == 'jitpack' && '-P openvpn.useJitpack=true' || '' }}
+
+  apple:
+    name: iOS and macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build iOS (no signing)
+        working-directory: example
+        run: flutter build ios --debug --no-codesign
+      - name: Build macOS
+        working-directory: example
+        run: flutter build macos --debug

@@ -24,8 +24,7 @@ void main() {
     }
   });
 
-  testWidgets('shows the disconnected state and the controls',
-      (tester) async {
+  testWidgets('shows the disconnected state and the controls', (tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
 

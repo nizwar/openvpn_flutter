@@ -234,7 +234,8 @@ void main() {
     test('filteredConfig keeps one of several remotes in place', () async {
       const config = 'client\nremote a 1\nremote b 2\nremote c 3\nproto udp';
       final filtered = (await OpenVPN.filteredConfig(config))!.split('\n');
-      expect(filtered.where((line) => line.startsWith('remote ')), hasLength(1));
+      expect(
+          filtered.where((line) => line.startsWith('remote ')), hasLength(1));
       expect(filtered.first, 'client');
       expect(filtered[1], startsWith('remote '));
       expect(filtered.last, 'proto udp');
@@ -325,8 +326,7 @@ void main() {
       expect(arguments['expire_at'], expireAt.millisecondsSinceEpoch);
     });
 
-    test('connect adds client-cert-not-required for OpenVPN 3 (iOS)',
-        () async {
+    test('connect adds client-cert-not-required for OpenVPN 3 (iOS)', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       await initialize();
 
@@ -359,8 +359,8 @@ void main() {
       await initialize();
       platform.connectError =
           PlatformException(code: 'invalid_config', message: 'bad');
-      await expectLater(vpn.connect('nope', 'name'),
-          throwsA(isA<PlatformException>()));
+      await expectLater(
+          vpn.connect('nope', 'name'), throwsA(isA<PlatformException>()));
     });
 
     test('connect rejects allowed and bypassed packages together', () async {
@@ -387,8 +387,7 @@ void main() {
 
     test('reports status while connected and resets it after', () async {
       await initialize();
-      final connectedOn =
-          DateTime.now().subtract(const Duration(minutes: 5));
+      final connectedOn = DateTime.now().subtract(const Duration(minutes: 5));
       platform.status = {
         'connected_on': connectedOn.millisecondsSinceEpoch,
         'byte_in': 1000,
