@@ -195,6 +195,26 @@ errors to the App Group so the app can show them.
 
 <img src="https://blogger.googleusercontent.com/img/a/AVvXsEhPf7Vl_8LPYMTTCn0UbpR3f3qzaFPFRMikSg8xetWRyfTuViq6o3fdrjU4-jD-xZtkOZV_i2WoNXkcHLn7znHengHZGgtlJlNbNk6vjNYgI2jYg8ToOYIQjR7QBd443ee4GqpEww0FYPrIiIpabUthpur6SakiPJM1dsDNCBW9ROWixuEzrk61aIod=s600">
 
+<details>
+<summary>Writing your own provider (another OpenVPN engine)</summary>
+
+The plugin does not depend on OpenVPNAdapter; any packet tunnel provider that
+follows this contract works (TunnelKit/Partout, a fork, ...):
+
+- `protocolConfiguration.providerConfiguration` holds `config` (the `.ovpn`
+  content, `Data`), `groupIdentifier`, `username`, `password` and
+  `privateKeyPassword` (`Data`, may be empty), `name` (`String`) and `expireAt`
+  (`NSNumber`, milliseconds since 1970, optional). `startTunnel(options:)`
+  receives `username`, `password`, `privateKeyPassword` and `expireAt` too.
+- `handleAppMessage` receives `OPENVPN_STATS` and answers JSON with
+  `connected_on` (milliseconds), `byte_in`, `byte_out`, `packets_in`, `packets_out`.
+- Log lines go to `<App Group container>/openvpn_flutter/vpn.log`, one per line:
+  `<milliseconds>\t<level>\t<message>`.
+- The last fatal error goes to the App Group's `UserDefaults` under
+  `openvpn_flutter.lastError`.
+
+</details>
+
 ### 5. Build phase order
 
 In the Runner target's **Build Phases**, drag **Embed Foundation Extensions**
