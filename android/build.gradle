@@ -34,7 +34,7 @@ apply plugin: 'com.android.library'
 
 android {
     namespace = 'id.laskarmedia.openvpn_flutter'
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         minSdk = 21
