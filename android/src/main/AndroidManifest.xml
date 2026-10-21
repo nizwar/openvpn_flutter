@@ -11,12 +11,7 @@
     <!-- Android 13+: the connection status notification. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!--
-        The engine starts OpenVPN as a separate process from libovpnexec.so, so
-        the native libraries must be extracted on install. Without this, release
-        builds and Play Store installs fail with "OpenVPN process exited".
-    -->
-    <application android:extractNativeLibs="true">
+    <application>
         <service
             android:name="de.blinkt.openvpn.core.OpenVPNService"
             android:exported="false"

@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
+import android.os.Build;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
@@ -12,6 +13,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.HashSet;
@@ -244,6 +246,12 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
     }
 
     private void connect(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+        String missingEngine = checkEngineInstalled();
+        if (missingEngine != null) {
+            result.error("native_libraries_not_extracted", missingEngine, null);
+            return;
+        }
+
         VpnProfile profile;
         try {
             profile = buildProfile(call);
@@ -328,6 +336,30 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
         } catch (ActivityNotFoundException e) {
             controller.onPermissionResult(false);
         }
+    }
+
+    /**
+     * OpenVPN runs as its own process from libovpnexec.so (Android 9+), which only
+     * exists on disk when the app's native libraries are extracted on install.
+     * AGP stores them uncompressed instead unless the app opts out, and the
+     * engine would then exit right away ("OpenVPN process exited").
+     *
+     * @return why the engine cannot start, or null when it can.
+     */
+    @Nullable
+    private String checkEngineInstalled() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            // Older versions run a copy of the binary from the app's assets.
+            return null;
+        }
+        File executable = new File(context.getApplicationInfo().nativeLibraryDir, "libovpnexec.so");
+        if (executable.exists()) {
+            return null;
+        }
+        return "The OpenVPN engine (libovpnexec.so) is not installed in " + executable.getParent() + ". "
+                + "Add `packaging { jniLibs { useLegacyPackaging = true } }` to the android block of "
+                + "android/app/build.gradle(.kts) so native libraries are extracted, and make sure the app "
+                + "includes the device's ABI (" + Build.SUPPORTED_ABIS[0] + ").";
     }
 
     /** Opens the system VPN settings, where "Always-on VPN" and "Block connections without VPN" live. */

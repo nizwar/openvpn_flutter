@@ -58,3 +58,44 @@ dependencies {
         implementation "com.github.nizwar:openvpn_library:${openvpnLibraryVersion}"
     }
 }
+
+// OpenVPN runs as its own process from libovpnexec.so, so the app has to
+// extract its native libraries on install. Point it out at build time rather
+// than with a VPN that exits right after connecting.
+def appProject = rootProject.findProject(':app')
+if (appProject != null) {
+    def checkNativeLibraryExtraction = {
+        try {
+            def appAndroid = appProject.extensions.findByName('android')
+            if (appAndroid == null) return
+            def legacyPackaging = null
+            try {
+                legacyPackaging = appAndroid.packaging.jniLibs.useLegacyPackaging
+            } catch (ignored) {
+                legacyPackaging = appAndroid.packagingOptions.jniLibs.useLegacyPackaging
+            }
+            def minSdk = null
+            try {
+                minSdk = appAndroid.defaultConfig.minSdk
+            } catch (ignored) {
+            }
+            def manifest = appAndroid.sourceSets.main.manifest.srcFile
+            def manifestExtracts = manifest != null && manifest.exists() &&
+                    manifest.text.contains('android:extractNativeLibs="true"')
+            def extracts = legacyPackaging == Boolean.TRUE ||
+                    (legacyPackaging == null && minSdk != null && minSdk < 23) || manifestExtracts
+            if (!extracts) {
+                logger.warn('openvpn_flutter: the app does not extract its native libraries, so the VPN ' +
+                        'cannot start. Add this to the android block of android/app/build.gradle(.kts):\n' +
+                        '    packaging { jniLibs { useLegacyPackaging = true } }')
+            }
+        } catch (Throwable ignored) {
+            // Never fail a build over this check.
+        }
+    }
+    if (appProject.state.executed) {
+        checkNativeLibraryExtraction()
+    } else {
+        appProject.afterEvaluate { checkNativeLibraryExtraction() }
+    }
+}
