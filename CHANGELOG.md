@@ -1,3 +1,8 @@
+## 1.4.0
+* Add macOS support (`macos/` plugin, podspec, `macos` platform declaration)
+* Treat macOS like iOS on the Dart side — `initialize()`, `status()` and the
+  stage listener previously branched on `Platform.isIOS` where they meant
+  "the Apple implementation", so macOS would connect with no status and no timer
 ## 1.3.4
 * Fix notification issue for newest SDK
 ## 1.3.3

@@ -84,6 +84,16 @@ class OpenVPN {
   ///
   ///
   ///Will return latest VPNStage
+  /// Whether this platform routes through the NetworkExtension implementation.
+  ///
+  /// iOS and macOS share it: the same NETunnelProviderManager API, the same
+  /// provider bundle identifier, the same App Group, and the same
+  /// underscore-joined stats string written into shared UserDefaults. Every
+  /// place that used to test `Platform.isIOS` meant "the Apple implementation"
+  /// rather than "iPhone", so testing for one and not the other left macOS
+  /// connected with no status and no timer.
+  static bool get _isApple => Platform.isIOS || Platform.isMacOS;
+
   Future<void> initialize({
     String? providerBundleIdentifier,
     String? localizedDescription,
@@ -91,12 +101,12 @@ class OpenVPN {
     Function(VpnStatus status)? lastStatus,
     Function(VPNStage stage)? lastStage,
   }) async {
-    if (Platform.isIOS) {
+    if (_isApple) {
       assert(
           groupIdentifier != null &&
               providerBundleIdentifier != null &&
               localizedDescription != null,
-          "These values are required for ios.");
+          "These values are required for iOS and macOS.");
     }
     onVpnStatusChanged?.call(VpnStatus.empty());
     initialized = true;
@@ -180,7 +190,7 @@ class OpenVPN {
         status = await _channelControl.invokeMethod("status").then((value) {
           if (value == null) return VpnStatus.empty();
 
-          if (Platform.isIOS) {
+          if (_isApple) {
             var splitted = value.split("_");
             var connectedOn = DateTime.tryParse(splitted[0]);
             if (connectedOn == null) return VpnStatus.empty();
@@ -291,7 +301,7 @@ class OpenVPN {
       if (vpnStage != VPNStage.disconnected) {
         if (Platform.isAndroid) {
           _createTimer();
-        } else if (Platform.isIOS && vpnStage == VPNStage.connected) {
+        } else if (_isApple && vpnStage == VPNStage.connected) {
           _createTimer();
         }
       } else {

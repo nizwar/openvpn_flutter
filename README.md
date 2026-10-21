@@ -91,6 +91,216 @@ Open `VPNExtension > PacketTunnelProvider.swift` and copy-paste the script from 
 
 <img src="https://blogger.googleusercontent.com/img/a/AVvXsEhPf7Vl_8LPYMTTCn0UbpR3f3qzaFPFRMikSg8xetWRyfTuViq6o3fdrjU4-jD-xZtkOZV_i2WoNXkcHLn7znHengHZGgtlJlNbNk6vjNYgI2jYg8ToOYIQjR7QBd443ee4GqpEww0FYPrIiIpabUthpur6SakiPJM1dsDNCBW9ROWixuEzrk61aIod=s600">
 
+## macOS Setup
+
+macOS uses the same `NETunnelProviderManager` API as iOS, so the Dart side is
+identical. What differs is how the provider is packaged, and there are two
+answers depending on how you ship.
+
+### 1. Pick your packaging
+
+| Distribution | Provider is a | Lives in |
+|---|---|---|
+| Mac App Store | App Extension (`.appex`) | `Contents/PlugIns/` |
+| Developer ID (outside the store) | **System Extension** | `Contents/Library/SystemExtensions/` |
+
+The entitlement value differs by **profile**, not by packaging:
+
+| Profile | `com.apple.developer.networking.networkextension` value |
+|---|---|
+| Development | `packet-tunnel-provider` |
+| Developer ID | `packet-tunnel-provider-systemextension` |
+
+Both spellings exist (they sit next to each other in the OS string table, along
+with the app-proxy, content-filter and dns-proxy pairs). Xcode's templates seed
+the bare value for **both** target types, which is correct for development and
+wrong for Developer ID — a Developer ID profile does not grant the bare value,
+and a development profile does not grant the `-systemextension` one. To see what
+a given profile actually grants:
+
+```bash
+security cms -D -i YourProfile.provisionprofile \
+  | plutil -extract Entitlements xml1 -o - -
+```
+
+In Xcode: **File → New → Target →** either *Network Extension* under
+**Application Extension** or under **System Extension**.
+
+### 2. Capabilities
+
+Add **Network Extensions** and **App Groups** to both the Runner target and the
+new target.
+
+**The App Group must be Team-ID prefixed on macOS.** This is the difference that
+costs the most time: iOS takes `group.com.example.app`, macOS takes
+`$(TeamIdentifierPrefix)group.com.example.app`. Pass the prefixed form to
+`initialize(groupIdentifier:)` on macOS, or the app and the extension end up
+reading two different `UserDefaults` suites — the tunnel connects and the app
+reports nothing.
+
+### 3. System Extension specifics
+
+A system extension is a standalone executable, not a loaded bundle, so it needs
+a `main.swift`:
+
+```swift
+import Foundation
+import NetworkExtension
+
+autoreleasepool { NEProvider.startSystemExtensionMode() }
+dispatchMain()
+```
+
+and an `Info.plist` naming the provider class:
+
+```xml
+<key>NetworkExtension</key>
+<dict>
+    <key>NEProviderClasses</key>
+    <dict>
+        <key>com.apple.networkextension.packet-tunnel</key>
+        <string>$(PRODUCT_MODULE_NAME).PacketTunnelProvider</string>
+    </dict>
+    <key>NEMachServiceName</key>
+    <string>$(TeamIdentifierPrefix)group.com.example.app</string>
+</dict>
+<key>NSSystemExtensionUsageDescription</key>
+<string>Needed to run the VPN tunnel.</string>
+```
+
+The containing app must install it at runtime with
+`OSSystemExtensionManager.shared.submitRequest(...)` and the user approves it in
+**System Settings → General → Login Items & Extensions → Network Extensions**.
+(It lived in Privacy & Security until macOS 15; every guide still naming that
+pane predates the move.) Until it is approved, `connect()` fails because there
+is no provider to start.
+
+macOS also refuses to install a system extension for an app running from
+anywhere but `/Applications` — `OSSystemExtensionError` 3, raised before
+anything is queued, so no approval prompt appears either. `flutter run -d macos`
+and Xcode both launch from a build directory, so **the tunnel cannot be tested
+on the normal dev loop**: copy the build to `/Applications` and launch it from
+there (a symlink does not work, the kernel resolves it).
+
+To test before notarizing: `systemextensionsctl developer on` (needs SIP
+disabled). A notarized build does not need developer mode.
+
+### 4. Podfile
+
+```ruby
+target 'VPNExtension' do
+  use_frameworks!
+  pod 'OpenVPNAdapter', :git => 'https://github.com/ss-abramchuk/OpenVPNAdapter.git', :tag => '0.8.0'
+end
+```
+
+`OpenVPNAdapter` supports macOS (`osx 10.11` in its podspec), so the engine
+itself needs nothing special.
+
+**A system extension must embed the framework itself, and CocoaPods will not do
+it for you.** This one costs an afternoon, because nothing about it looks like a
+failure until the very end:
+
+CocoaPods adds its `[CP] Embed Pods Frameworks` phase only to targets whose
+`symbol_type` is in `EMBED_FRAMEWORK_TARGET_TYPES`, and `symbol_type` comes from
+Xcodeproj's `PRODUCT_TYPE_UTI` table — which has no entry for
+`com.apple.product-type.system-extension`. The type resolves to `nil`, the
+target falls out of every list, and you get a `Pods-VPNExtension-frameworks.sh`
+that is generated correctly and never run. An app extension (`.appex`) is fine,
+because its host app embeds the frameworks for it; a system extension is a
+standalone process with no host.
+
+The build succeeds. The extension installs. `systemextensionsctl list` shows it
+`[activated enabled]` and so does System Settings. Then every start dies in dyld
+before `main`:
+
+```
+launchd: exited with exit reason (namespace: 6 code: 0x1) - OS_REASON_DYLD |
+  Library not loaded: @rpath/OpenVPNAdapter.framework/Versions/A/OpenVPNAdapter
+  ... service has crashed 44 times in a row
+```
+
+`nesessionmanager` logs `Sending start command`, the provider never activates,
+and `NEVPNStatus` sits on `connecting` forever — so the Dart side reports
+`VPNStage.connecting` and nothing else, with no error to show anyone. To see it:
+
+```bash
+log show --last 15m --predicate 'process == "nesessionmanager"' | grep -i <your-extension-id>
+```
+
+Fix it by adding the phase to the extension target by hand — run the script
+CocoaPods already wrote for you, as the target's **last** build phase:
+
+```
+"${PODS_ROOT}/Target Support Files/Pods-VPNExtension/Pods-VPNExtension-frameworks.sh"
+```
+
+with input paths `…/Pods-VPNExtension-frameworks.sh` and
+`${BUILT_PRODUCTS_DIR}/OpenVPNAdapter/OpenVPNAdapter.framework`, and output path
+`${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OpenVPNAdapter.framework`.
+`pod install` leaves it alone for the same reason it never added it: both the
+add and the remove path iterate the same empty target list. Verify with
+
+```bash
+ls YourApp.app/Contents/Library/SystemExtensions/*.systemextension/Contents/Frameworks
+```
+
+Signing a Developer ID build then has one more nested item: sign the framework,
+then the `.systemextension` with its entitlements, then the app — inside-out,
+and without `--deep` on the outer bundle, which would re-seal the extension
+without its entitlements.
+
+### 5. Provider implementation
+
+Identical to the iOS `PacketTunnelProvider.swift` in this README's iOS section.
+The adapter, the delegate callbacks and the `providerConfiguration` keys are the
+same on both platforms.
+
+### 6. Forward the engine's log, or you are blind
+
+`VPNStage.connecting` is where every failure in this stack ends up, and the
+plugin cannot tell you why: the reason exists inside the provider process and
+nowhere else. The app sees `connecting`, `nesessionmanager` sees a healthy
+provider, and `handleLogMessage` — which the reference implementation leaves
+empty — is handed the one line that explains it and drops it.
+
+Forward it, in debug builds at least:
+
+```swift
+func openVPNAdapter(
+    _ openVPNAdapter: OpenVPNAdapter,
+    handleLogMessage logMessage: String
+) {
+    #if DEBUG
+        os_log("OpenVPN: %{public}@", logMessage)
+    #endif
+}
+```
+
+Three details, each of which cost a round trip:
+
+* **`os_log` with `%{public}@`, not `NSLog("%@", …)`.** The unified log redacts
+  dynamic string arguments by default, and the NSLog version produces a run of
+  `(Foundation) <private>` lines — correctly timed, carrying nothing.
+* **`#if DEBUG` needs `SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG` on the
+  extension target's Debug configuration.** Xcode sets it on app targets; a
+  hand-made or script-generated extension target often has no value at all, and
+  then the block silently never compiles in.
+* **Keep release silent.** OpenVPN 3's log carries the profile's remote, its
+  certificate subject and its cipher negotiation, and os_log puts that in the
+  device log.
+
+Read it with:
+
+```bash
+log show --last 5m --predicate 'process CONTAINS "VPNExtension"' | grep OpenVPN
+```
+
+`Server poll timeout, trying next remote entry...` after `Contacting <ip> via
+UDP` means the client sent its handshake and nothing came back — a server,
+firewall or `tls-crypt` key problem, not a client one. That single line is the
+difference between debugging the app and debugging the server.
+
 ## Note
 
 You must use iOS devices instead of the simulator to connect.
