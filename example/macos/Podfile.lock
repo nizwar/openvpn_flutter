@@ -1,0 +1,23 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - openvpn_flutter (2.0.0):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - openvpn_flutter (from `Flutter/ephemeral/.symlinks/plugins/openvpn_flutter/darwin`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  openvpn_flutter:
+    :path: Flutter/ephemeral/.symlinks/plugins/openvpn_flutter/darwin
+
+SPEC CHECKSUMS:
+  FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
+  openvpn_flutter: 770557adc8c06d196926a5e3dd9de0b3df41e97d
+
+PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
+
+COCOAPODS: 1.16.2

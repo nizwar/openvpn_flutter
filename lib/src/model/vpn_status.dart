@@ -144,8 +144,11 @@ class VpnStatus {
   }
 
   static DateTime? _parseDate(Object? value) {
-    if (value is int) {
-      return value > 0 ? DateTime.fromMillisecondsSinceEpoch(value) : null;
+    if (value is num) {
+      final milliseconds = value.toInt();
+      return milliseconds > 0
+          ? DateTime.fromMillisecondsSinceEpoch(milliseconds)
+          : null;
     }
     if (value is String && value.trim().isNotEmpty) {
       final millis = int.tryParse(value.trim());

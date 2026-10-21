@@ -84,12 +84,15 @@ class _VpnPageState extends State<VpnPage> {
       );
       final logs = await engine.getLogs();
       setState(() => _logs.addAll(logs.reversed.take(200)));
-      _logSubscription = engine.logStream.listen((log) {
-        setState(() {
-          _logs.insert(0, log);
-          if (_logs.length > 200) _logs.removeLast();
-        });
-      });
+      _logSubscription = engine.logStream.listen(
+        (log) {
+          setState(() {
+            _logs.insert(0, log);
+            if (_logs.length > 200) _logs.removeLast();
+          });
+        },
+        onError: (Object error) => debugPrint('Log stream: $error'),
+      );
     } on PlatformException catch (e) {
       setState(() => _error = e.message);
     }
