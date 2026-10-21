@@ -1,0 +1,3 @@
+[submodule "openvpn_library"]
+	path = openvpn_library
+	url = https://github.com/nizwar/openvpn_library.git
