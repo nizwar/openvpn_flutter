@@ -1,0 +1,28 @@
+# .pubignore replaces .gitignore for this directory: keep its rules.
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+.gradle/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.idea/
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.packages
+build/
+
+# Development only.
+/openvpn_library/
+/.github/
+/.gitmodules
+**/.build/
+**/.swiftpm/
