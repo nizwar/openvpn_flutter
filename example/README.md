@@ -1,16 +1,41 @@
 # openvpn_flutter_example
 
-Demonstrates how to use the openvpn_flutter plugin.
+Demonstrates the [openvpn_flutter](https://pub.dev/packages/openvpn_flutter) plugin:
+connect with a pasted `.ovpn` configuration, follow the stage, traffic and speed,
+and read the engine log.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+```sh
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Paste a configuration in the app, or pass one when starting it:
 
-- [Lab: Write your first Flutter app](https://flutter.dev/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.dev/docs/cookbook)
+```sh
+flutter run --dart-define=OVPN_CONFIG=$(base64 < client.ovpn | tr -d '\n')
+```
 
-For help getting started with Flutter, view our
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- **Android:** works on devices and emulators. The `android` project shows the
+  required `useLegacyPackaging` setting.
+- **iOS:** needs a device and a signing team with the Network Extensions
+  capability; set your team, bundle identifiers and App Group in Xcode and in
+  `lib/main.dart`. `ios/VPNExtension/PacketTunnelProvider.swift` is the packet
+  tunnel provider to copy into your app.
+- **macOS:** the runner builds the plugin; connecting needs a packet tunnel
+  extension (see the plugin README).
+
+When cloning the plugin repository, `git submodule update --init` fetches the
+Android engine sources (`openvpn_library`), which the example then builds from;
+pass `-Popenvpn.useJitpack=true` to Gradle to use the published engine instead.
+
+## Integration tests
+
+`integration_test/connection_test.dart` connects to a real server:
+
+```sh
+# Android: grant the VPN permission once per install
+adb shell appops set id.laskarmedia.openvpn_flutter_example ACTIVATE_VPN allow
+flutter test integration_test/connection_test.dart \
+  --dart-define=OVPN_CONFIG=$(base64 < client.ovpn | tr -d '\n')
+```
