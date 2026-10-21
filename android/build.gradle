@@ -5,7 +5,7 @@ version = '2.0.0'
 // aligned native libraries) is built from https://github.com/nizwar/openvpn_library
 // and served by JitPack. Pin a commit, never a branch, so every app builds the
 // same engine.
-def openvpnLibraryVersion = '5ee8405716'
+def openvpnLibraryVersion = '8a3e7c183e'
 
 buildscript {
     repositories {
