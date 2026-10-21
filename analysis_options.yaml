@@ -2,8 +2,8 @@ analyzer:
   exclude:
     - build/**
     - android/**
-    - ios/**
-    - macos/**
+    - darwin/**
+    - openvpn_library/**
 include: package:flutter_lints/flutter.yaml
 
 # Additional information about this file can be found at
