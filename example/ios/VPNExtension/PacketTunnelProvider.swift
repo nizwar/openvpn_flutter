@@ -2,7 +2,16 @@
 //  PacketTunnelProvider.swift
 //  VPNExtension
 //
-//  Created by Mochamad Nizwar Syafuan on 31/12/21.
+//  The packet tunnel provider used with openvpn_flutter 2.x on iOS and macOS.
+//  Copy it into your Network Extension target; it needs the OpenVPNAdapter
+//  library (CocoaPods or Swift Package Manager, see the README).
+//
+//  - Reads the configuration openvpn_flutter saves (config, credentials,
+//    private key password, session end).
+//  - Answers the plugin's status requests with the traffic counters.
+//  - Writes the OpenVPN log and the last fatal error to the App Group, so the
+//    app can show why a connection failed (OpenVPN.getLogs(), lastError()).
+//  - Never crashes the extension: problems end the tunnel with an error.
 //
 
 import NetworkExtension
@@ -12,66 +21,63 @@ import os.log
 extension NEPacketTunnelFlow: OpenVPNAdapterPacketFlow {}
 
 class PacketTunnelProvider: NEPacketTunnelProvider {
-    
+
     lazy var vpnAdapter: OpenVPNAdapter = {
         let adapter = OpenVPNAdapter()
         adapter.delegate = self
         return adapter
     }()
-    
+
     let vpnReachability = OpenVPNReachability()
-    var providerManager: NETunnelProviderManager!
-    
+
     var startHandler: ((Error?) -> Void)?
     var stopHandler: (() -> Void)?
-    var groupIdentifier: String?
-    
-    static var connectionIndex = 0;
-    static var timeOutEnabled = true;
-    
-    func loadProviderManager(completion:@escaping (_ error : Error?) -> Void)  {
-        NETunnelProviderManager.loadAllFromPreferences { (managers, error)  in
-            if error == nil {
-                self.providerManager = managers?.first ?? NETunnelProviderManager()
-                completion(nil)
-            } else {
-                completion(error)
-            }
-        }
-    }
-    
-    override func startTunnel(options: [String : NSObject]?, completionHandler: @escaping (Error?) -> Void) { 
+
+    private var groupIdentifier: String?
+    private var connectedOn: Date?
+    private var expiryTimer: DispatchSourceTimer?
+    private let log = SharedLog()
+
+    // MARK: - Tunnel lifecycle
+
+    override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         guard
-            let protocolConfiguration = protocolConfiguration as? NETunnelProviderProtocol,
-            let providerConfiguration = protocolConfiguration.providerConfiguration
+            let tunnelProtocol = protocolConfiguration as? NETunnelProviderProtocol,
+            let providerConfiguration = tunnelProtocol.providerConfiguration,
+            let configData = providerConfiguration["config"] as? Data,
+            !configData.isEmpty
         else {
-            fatalError()
-        }
-        guard let ovpnFileContent: Data = providerConfiguration["config"] as? Data else {
-            fatalError()
-        }
-        
-        guard let groupIdentifier: Data = providerConfiguration["groupIdentifier"] as? Data else{
-            fatalError()
-        }
-        self.groupIdentifier = String(decoding: groupIdentifier, as: UTF8.self)
-                    
-        let configuration = OpenVPNConfiguration()
-        configuration.fileContent = ovpnFileContent
-        configuration.tunPersist = false
-        
-        // Apply OpenVPN configuration.
-        let properties: OpenVPNConfigurationEvaluation
-        do {
-            properties = try vpnAdapter.apply(configuration: configuration)
-        } catch {
-            completionHandler(error)
+            completionHandler(Self.error("The VPN configuration is missing. Connect from the app again."))
             return
         }
-        
-        if !properties.autologin {
-            guard let username = options?["username"] as? String, let password = options?["password"] as? String else {
-                fatalError()
+
+        groupIdentifier = Self.string(providerConfiguration["groupIdentifier"])
+        log.open(groupIdentifier: groupIdentifier)
+        setLastError(nil)
+
+        let configuration = OpenVPNConfiguration()
+        configuration.fileContent = configData
+        configuration.tunPersist = false
+        if let keyPassword = Self.string(options?["privateKeyPassword"])
+            ?? Self.string(providerConfiguration["privateKeyPassword"]),
+            !keyPassword.isEmpty {
+            configuration.privateKeyPassword = keyPassword
+        }
+
+        let evaluation: OpenVPNConfigurationEvaluation
+        do {
+            evaluation = try vpnAdapter.apply(configuration: configuration)
+        } catch {
+            fail(error, completionHandler)
+            return
+        }
+
+        if !evaluation.autologin {
+            let username = Self.string(options?["username"]) ?? Self.string(providerConfiguration["username"]) ?? ""
+            let password = Self.string(options?["password"]) ?? Self.string(providerConfiguration["password"]) ?? ""
+            if username.isEmpty {
+                fail(Self.error("This configuration needs a username and password."), completionHandler)
+                return
             }
             let credentials = OpenVPNCredentials()
             credentials.username = username
@@ -79,123 +85,161 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             do {
                 try vpnAdapter.provide(credentials: credentials)
             } catch {
-                completionHandler(error)
+                fail(error, completionHandler)
                 return
             }
         }
-        
+
+        let expireAt = (options?["expireAt"] as? NSNumber) ?? (providerConfiguration["expireAt"] as? NSNumber)
+        scheduleExpiry(millisecondsSince1970: expireAt?.doubleValue)
+
         vpnReachability.startTracking { [weak self] status in
             guard status == .reachableViaWiFi else { return }
             self?.vpnAdapter.reconnect(afterTimeInterval: 5)
         }
+
         startHandler = completionHandler
         vpnAdapter.connect(using: packetFlow)
     }
-    
-    @objc func stopVPN() {
-        loadProviderManager { (err :Error?) in
-            if err == nil {
-                self.providerManager.connection.stopVPNTunnel();
-            }
-        }
-    }
-    
+
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        log.write("info", "Stopping the tunnel (reason \(reason.rawValue))")
+        expiryTimer?.cancel()
+        expiryTimer = nil
         stopHandler = completionHandler
         if vpnReachability.isTracking {
             vpnReachability.stopTracking()
         }
         vpnAdapter.disconnect()
     }
-    
+
+    // MARK: - Messages from the app
+
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
-        if String(data: messageData, encoding: .utf8) == "OPENVPN_STATS" {            
-            var toSave = ""
-            let formatter = DateFormatter();
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss";            
-            toSave += UserDefaults.init(suiteName: groupIdentifier)?.string(forKey: "connected_on") ?? ""
-            toSave+="_"
-            toSave += String(vpnAdapter.interfaceStatistics.packetsIn)
-            toSave+="_"
-            toSave += String(vpnAdapter.interfaceStatistics.packetsOut)
-            toSave+="_"
-            toSave += String(vpnAdapter.interfaceStatistics.bytesIn)
-            toSave+="_"
-            toSave += String(vpnAdapter.interfaceStatistics.bytesOut)
-            UserDefaults.init(suiteName: groupIdentifier)?.setValue(toSave, forKey: "connectionUpdate")
+        guard String(data: messageData, encoding: .utf8) == "OPENVPN_STATS" else {
+            completionHandler?(nil)
+            return
         }
+        let statistics = vpnAdapter.interfaceStatistics
+        var status: [String: Any] = [
+            "byte_in": statistics.bytesIn,
+            "byte_out": statistics.bytesOut,
+            "packets_in": statistics.packetsIn,
+            "packets_out": statistics.packetsOut,
+        ]
+        if let connectedOn = connectedOn {
+            status["connected_on"] = Int64(connectedOn.timeIntervalSince1970 * 1000)
+        }
+        completionHandler?(try? JSONSerialization.data(withJSONObject: status))
+    }
+
+    // MARK: - Helpers
+
+    private func scheduleExpiry(millisecondsSince1970: Double?) {
+        expiryTimer?.cancel()
+        expiryTimer = nil
+        guard let milliseconds = millisecondsSince1970, milliseconds > 0 else { return }
+        let delay = max(0, milliseconds / 1000 - Date().timeIntervalSince1970)
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler { [weak self] in
+            self?.log.write("info", "Session expired, disconnecting")
+            self?.cancelTunnelWithError(nil)
+        }
+        timer.resume()
+        expiryTimer = timer
+    }
+
+    private func fail(_ error: Error, _ completionHandler: (Error?) -> Void) {
+        log.write("error", error.localizedDescription)
+        setLastError(error.localizedDescription)
+        completionHandler(error)
+    }
+
+    private func setLastError(_ message: String?) {
+        guard let groupIdentifier = groupIdentifier else { return }
+        let defaults = UserDefaults(suiteName: groupIdentifier)
+        if let message = message {
+            defaults?.set(message, forKey: "openvpn_flutter.lastError")
+        } else {
+            defaults?.removeObject(forKey: "openvpn_flutter.lastError")
+        }
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        if let data = value as? Data { return String(data: data, encoding: .utf8) }
+        return value as? String
+    }
+
+    private static func name(of event: OpenVPNAdapterEvent) -> String {
+        switch event {
+        case .disconnected: return "DISCONNECTED"
+        case .connected: return "CONNECTED"
+        case .reconnecting: return "RECONNECTING"
+        case .authPending: return "AUTH_PENDING"
+        case .resolve: return "RESOLVE"
+        case .wait: return "WAIT"
+        case .waitProxy: return "WAIT_PROXY"
+        case .connecting: return "CONNECTING"
+        case .getConfig: return "GET_CONFIG"
+        case .assignIP: return "ASSIGN_IP"
+        case .addRoutes: return "ADD_ROUTES"
+        case .pause: return "PAUSE"
+        case .resume: return "RESUME"
+        default: return "\(event.rawValue)"
+        }
+    }
+
+    private static func error(_ message: String) -> NSError {
+        NSError(domain: "openvpn_flutter", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
 
 extension PacketTunnelProvider: OpenVPNAdapterDelegate {
-    func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, configureTunnelWithNetworkSettings networkSettings: NEPacketTunnelNetworkSettings?, completionHandler: @escaping (Error?) -> Void) {
+
+    func openVPNAdapter(
+        _ openVPNAdapter: OpenVPNAdapter,
+        configureTunnelWithNetworkSettings networkSettings: NEPacketTunnelNetworkSettings?,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        // Send all DNS queries through the tunnel.
         networkSettings?.dnsSettings?.matchDomains = [""]
         setTunnelNetworkSettings(networkSettings, completionHandler: completionHandler)
     }
-     
-    
-    func _updateEvent(_ event: OpenVPNAdapterEvent, openVPNAdapter: OpenVPNAdapter) {
-        var toSave = ""
-        let formatter = DateFormatter();
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss";
-        switch event {
-        case .connected:
-            toSave = "CONNECTED"
-            UserDefaults.init(suiteName: groupIdentifier)?.setValue(formatter.string(from: Date.now), forKey: "connected_on")
-            break
-        case .disconnected:
-            toSave = "DISCONNECTED"
-            break
-        case .connecting:
-            toSave = "CONNECTING"
-            break
-        case .reconnecting:
-            toSave = "RECONNECTING"
-            break
-        case .info:
-            toSave = "CONNECTED"
-            break
-        default:
-            UserDefaults.init(suiteName: groupIdentifier)?.removeObject(forKey: "connected_on")
-            toSave = "INVALID"
-        }
-        UserDefaults.init(suiteName: groupIdentifier)?.setValue(toSave, forKey: "vpnStage")
-    }
-    
+
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleEvent event: OpenVPNAdapterEvent, message: String?) {
-        PacketTunnelProvider.timeOutEnabled = true;
-        _updateEvent(event, openVPNAdapter: openVPNAdapter)
+        log.write("info", "Event \(Self.name(of: event))\(message.map { ": \($0)" } ?? "")")
         switch event {
         case .connected:
-            PacketTunnelProvider.timeOutEnabled = false;
+            // Date(), not Date.now: Date.now needs iOS 15 in app extensions.
+            connectedOn = Date()
             if reasserting {
                 reasserting = false
             }
             guard let startHandler = startHandler else { return }
             startHandler(nil)
             self.startHandler = nil
-            break
         case .disconnected:
-            PacketTunnelProvider.timeOutEnabled = false;
+            connectedOn = nil
             guard let stopHandler = stopHandler else { return }
             if vpnReachability.isTracking {
                 vpnReachability.stopTracking()
             }
             stopHandler()
             self.stopHandler = nil
-            break
         case .reconnecting:
             reasserting = true
-            break
         default:
             break
         }
     }
-    
+
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleError error: Error) {
-        guard let fatal = (error as NSError).userInfo[OpenVPNAdapterErrorFatalKey] as? Bool, fatal == true else {
+        log.write("error", error.localizedDescription)
+        guard let fatal = (error as NSError).userInfo[OpenVPNAdapterErrorFatalKey] as? Bool, fatal else {
             return
         }
+        setLastError(error.localizedDescription)
         if vpnReachability.isTracking {
             vpnReachability.stopTracking()
         }
@@ -206,7 +250,50 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
             cancelTunnelWithError(error)
         }
     }
-    
+
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleLogMessage logMessage: String) {
+        log.write("info", logMessage)
+    }
+}
+
+/// Appends log lines to `<App Group>/openvpn_flutter/vpn.log`, where
+/// openvpn_flutter reads them (`<milliseconds>\t<level>\t<message>`).
+/// Each connection starts a new file; it never grows past `maxSize`.
+private final class SharedLog {
+    private let maxSize: UInt64 = 512 * 1024
+    private let queue = DispatchQueue(label: "openvpn_flutter.log")
+    private var url: URL?
+
+    func open(groupIdentifier: String?) {
+        queue.sync {
+            guard let groupIdentifier = groupIdentifier,
+                  let container = FileManager.default.containerURL(
+                    forSecurityApplicationGroupIdentifier: groupIdentifier)
+            else {
+                url = nil
+                return
+            }
+            let directory = container.appendingPathComponent("openvpn_flutter", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("vpn.log")
+            FileManager.default.createFile(atPath: file.path, contents: nil)
+            url = file
+        }
+    }
+
+    func write(_ level: String, _ message: String) {
+        #if DEBUG
+        os_log("OpenVPN: %{public}@", message)
+        #endif
+        queue.async {
+            guard let url = self.url, let handle = try? FileHandle(forWritingTo: url) else { return }
+            defer { handle.closeFile() }
+            if handle.seekToEndOfFile() > self.maxSize {
+                handle.truncateFile(atOffset: 0)
+            }
+            let time = Int64(Date().timeIntervalSince1970 * 1000)
+            let line = "\(time)\t\(level)\t\(message.replacingOccurrences(of: "\n", with: " "))\n"
+            handle.write(Data(line.utf8))
+        }
     }
 }

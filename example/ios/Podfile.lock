@@ -1,45 +1,52 @@
 PODS:
   - Flutter (1.0.0)
-  - openvpn_flutter (0.0.1):
+  - integration_test (0.0.1):
     - Flutter
-  - OpenVPNAdapter (0.7.0):
-    - OpenVPNAdapter/ASIO (= 0.7.0)
-    - OpenVPNAdapter/LZ4 (= 0.7.0)
-    - OpenVPNAdapter/mbedTLS (= 0.7.0)
-    - OpenVPNAdapter/OpenVPN3 (= 0.7.0)
-    - OpenVPNAdapter/OpenVPNAdapter (= 0.7.0)
-    - OpenVPNAdapter/OpenVPNClient (= 0.7.0)
-  - OpenVPNAdapter/ASIO (0.7.0)
-  - OpenVPNAdapter/LZ4 (0.7.0)
-  - OpenVPNAdapter/mbedTLS (0.7.0)
-  - OpenVPNAdapter/OpenVPN3 (0.7.0)
-  - OpenVPNAdapter/OpenVPNAdapter (0.7.0)
-  - OpenVPNAdapter/OpenVPNClient (0.7.0)
+  - openvpn_flutter (2.0.0):
+    - Flutter
+    - FlutterMacOS
+  - OpenVPNAdapter (0.8.0):
+    - OpenVPNAdapter/ASIO (= 0.8.0)
+    - OpenVPNAdapter/LZ4 (= 0.8.0)
+    - OpenVPNAdapter/mbedTLS (= 0.8.0)
+    - OpenVPNAdapter/OpenVPN3 (= 0.8.0)
+    - OpenVPNAdapter/OpenVPNAdapter (= 0.8.0)
+    - OpenVPNAdapter/OpenVPNClient (= 0.8.0)
+  - OpenVPNAdapter/ASIO (0.8.0)
+  - OpenVPNAdapter/LZ4 (0.8.0)
+  - OpenVPNAdapter/mbedTLS (0.8.0)
+  - OpenVPNAdapter/OpenVPN3 (0.8.0)
+  - OpenVPNAdapter/OpenVPNAdapter (0.8.0)
+  - OpenVPNAdapter/OpenVPNClient (0.8.0)
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - openvpn_flutter (from `.symlinks/plugins/openvpn_flutter/ios`)
-  - OpenVPNAdapter (from `https://github.com/ss-abramchuk/OpenVPNAdapter.git`, tag `0.7.0`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+  - openvpn_flutter (from `.symlinks/plugins/openvpn_flutter/darwin`)
+  - OpenVPNAdapter (from `https://github.com/ss-abramchuk/OpenVPNAdapter.git`, tag `0.8.0`)
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
   openvpn_flutter:
-    :path: ".symlinks/plugins/openvpn_flutter/ios"
+    :path: ".symlinks/plugins/openvpn_flutter/darwin"
   OpenVPNAdapter:
     :git: https://github.com/ss-abramchuk/OpenVPNAdapter.git
-    :tag: 0.7.0
+    :tag: 0.8.0
 
 CHECKOUT OPTIONS:
   OpenVPNAdapter:
     :git: https://github.com/ss-abramchuk/OpenVPNAdapter.git
-    :tag: 0.7.0
+    :tag: 0.8.0
 
 SPEC CHECKSUMS:
-  Flutter: 50d75fe2f02b26cc09d224853bb45737f8b3214a
-  openvpn_flutter: 35f2b149956e0be8d97c2af221321a495bcd92fa
-  OpenVPNAdapter: 173fcc4c11a3a8a83ae8d250c079cdc5b9fb8ff1
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+  openvpn_flutter: 770557adc8c06d196926a5e3dd9de0b3df41e97d
+  OpenVPNAdapter: 1d945f4528073ff641d4ed90d98e28f2b1c86d05
 
-PODFILE CHECKSUM: 2da1a35c0d55987349665f85a190a76dad3ea298
+PODFILE CHECKSUM: ac9a8ead7b5631b51016103c32ca86800d906751
 
-COCOAPODS: 1.11.3
+COCOAPODS: 1.16.2

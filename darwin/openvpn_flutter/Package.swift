@@ -6,7 +6,8 @@ import PackageDescription
 let package = Package(
     name: "openvpn_flutter",
     platforms: [
-        .macOS(.v10_15)
+        .iOS("12.0"),
+        .macOS("10.15"),
     ],
     products: [
         .library(name: "openvpn-flutter", targets: ["openvpn_flutter"])
@@ -19,6 +20,9 @@ let package = Package(
             name: "openvpn_flutter",
             dependencies: [
                 .product(name: "FlutterFramework", package: "FlutterFramework")
+            ],
+            resources: [
+                .process("PrivacyInfo.xcprivacy")
             ]
         )
     ]

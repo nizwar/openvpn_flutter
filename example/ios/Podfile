@@ -1,5 +1,4 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '12.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -29,19 +28,20 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
-  use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+# The packet tunnel provider. Keep it a top-level target: nested inside
+# 'Runner' it would inherit every Flutter plugin pod, which app extensions
+# cannot link.
+target 'VPNExtension' do
+  use_frameworks!
+  pod 'OpenVPNAdapter', :git => 'https://github.com/ss-abramchuk/OpenVPNAdapter.git', :tag => '0.8.0'
 end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
-end
-
-target 'VPNExtension' do
-  use_frameworks!
-  use_modular_headers!
-  pod 'OpenVPNAdapter', :git => 'https://github.com/ss-abramchuk/OpenVPNAdapter.git', :tag => '0.7.0'
 end
