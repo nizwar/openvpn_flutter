@@ -1,13 +1,43 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="id.laskarmedia.openvpn_flutter">
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" android:minSdkVersion="34" />
-    <application>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+: the VPN service runs as a "system exempted" foreground service. -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
+        android:minSdkVersion="34" />
+    <!-- Android 13+: the connection status notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        The engine starts OpenVPN as a separate process from libovpnexec.so, so
+        the native libraries must be extracted on install. Without this, release
+        builds and Play Store installs fail with "OpenVPN process exited".
+    -->
+    <application android:extractNativeLibs="true">
         <service
             android:name="de.blinkt.openvpn.core.OpenVPNService"
+            android:exported="false"
             android:foregroundServiceType="systemExempted"
+            tools:replace="android:exported" />
+
+        <!--
+            ics-openvpn UI components, used by the notification and never meant
+            to be started by other apps.
+        -->
+        <activity
+            android:name="de.blinkt.openvpn.LaunchVPN"
             android:exported="false"
             tools:replace="android:exported" />
+        <activity
+            android:name="de.blinkt.openvpn.DisconnectVPNActivity"
+            android:exported="false"
+            tools:replace="android:exported" />
+        <!-- A helper class of the engine, not an actual screen. -->
+        <activity
+            android:name="de.blinkt.openvpn.VPNHelper"
+            tools:node="remove" />
     </application>
 </manifest>

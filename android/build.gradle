@@ -1,32 +1,32 @@
-group 'id.laskarmedia.openvpn_flutter'
-version '1.0'
+group = 'id.laskarmedia.openvpn_flutter'
+version = '2.0.0'
+
+// The OpenVPN engine (ics-openvpn, OpenVPN 2.7 + OpenSSL 3.5, 16 KB page
+// aligned native libraries) is built from https://github.com/nizwar/openvpn_library
+// and served by JitPack. Pin a commit, never a branch, so every app builds the
+// same engine.
+def openvpnLibraryVersion = '5ee8405716'
 
 buildscript {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.2'
+        // Only used when this module is built on its own; inside an app the
+        // app's Android Gradle Plugin is used.
+        classpath 'com.android.tools.build:gradle:8.7.3'
     }
 }
 
+// JitPack hosts the engine. Added to every project because the dependency is
+// resolved from the app module.
 rootProject.allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
-    }
-}
-
-
-allprojects {
-    repositories {
-        mavenLocal()
-        mavenCentral()
-        maven { url "https://jitpack.io" }
+        maven { url = 'https://jitpack.io' }
     }
 }
 
@@ -34,18 +34,27 @@ apply plugin: 'com.android.library'
 
 android {
     namespace = 'id.laskarmedia.openvpn_flutter'
-    compileSdkVersion 34
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
+    compileSdk = 36
 
     defaultConfig {
-        minSdkVersion 16
+        minSdk = 21
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 }
 
 dependencies {
-    implementation 'com.github.nizwar:openvpn_library:b3941ef040'
+    // The example app (and anyone developing the engine) can build the engine
+    // from the openvpn_library submodule instead: its settings.gradle includes
+    // it as :openvpn_library when the submodule is checked out.
+    def localEngine = rootProject.findProject(':openvpn_library')
+    if (localEngine != null) {
+        implementation localEngine
+    } else {
+        implementation "com.github.nizwar:openvpn_library:${openvpnLibraryVersion}"
+    }
 }
