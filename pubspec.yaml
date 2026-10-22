@@ -1,6 +1,6 @@
 name: openvpn_flutter
 description: Connect to OpenVPN servers from Flutter on Android, iOS and macOS. Stage, traffic and log streams, per-app VPN, session timeouts, 16 KB page size ready.
-version: 2.0.0
+version: 2.0.1
 homepage: https://github.com/nizwar/openvpn_flutter
 repository: https://github.com/nizwar/openvpn_flutter
 issue_tracker: https://github.com/nizwar/openvpn_flutter/issues

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'openvpn_flutter'
-  s.version          = '2.0.0'
+  s.version          = '2.0.1'
   s.summary          = 'OpenVPN for Flutter'
   s.description      = <<-DESC
 Connects Flutter apps to OpenVPN servers through a NetworkExtension packet tunnel provider.
