@@ -229,33 +229,170 @@ Pass the App Group and the extension's bundle identifier to `initialize()`, see
 ## macOS setup
 
 macOS uses the same `NETunnelProviderManager` API, so the Dart side and the
-`PacketTunnelProvider.swift` above are the same. What differs is how the
-provider is packaged:
+`PacketTunnelProvider.swift` above are the same. Complete the iOS setup first,
+then apply the macOS-specific steps below. What differs is how the provider is
+packaged:
 
 | Distribution                     | Provider is a                | Entitlement value (`com.apple.developer.networking.networkextension`) |
 | -------------------------------- | ---------------------------- | ----------------------------------------------- |
 | Mac App Store                    | App Extension (`.appex`)     | `packet-tunnel-provider`                        |
 | Developer ID (outside the store) | System Extension             | `packet-tunnel-provider-systemextension` (Developer ID profile), `packet-tunnel-provider` while developing |
 
-- **App Group identifiers are Team ID prefixed on macOS**:
-  `$(TeamIdentifierPrefix)group.com.example.app`. Pass that full value to
-  `initialize(groupIdentifier:)`, otherwise the app and the extension use
-  different containers and status and logs stay empty.
-- A **System Extension** needs a `main.swift` (`autoreleasepool { NEProvider.startSystemExtensionMode() }`
-  then `dispatchMain()`), an `Info.plist` with `NetworkExtension → NEProviderClasses`
-  and `NEMachServiceName`, and the app must install it with
-  `OSSystemExtensionManager` and the user approves it in **System Settings →
-  General → Login Items & Extensions → Network Extensions**. macOS only installs
-  system extensions of apps running from `/Applications`.
-- CocoaPods does not embed frameworks into a System Extension: add a Run Script
-  phase executing `"${PODS_ROOT}/Target Support Files/Pods-VPNExtension/Pods-VPNExtension-frameworks.sh"`
-  as the extension's last build phase, or use Swift Package Manager for
-  OpenVPNAdapter.
-- Sign inside out: the framework, the extension with its entitlements, then the
-  app (no `--deep`).
-- A System Extension runs as root and may not share the app's App Group
-  container: status still works (it is a message to the provider), but logs and
-  `lastError()` can then only come from the system (`lastError()` on macOS 13+).
+### 1. Choose the extension type
+
+Use a Packet Tunnel **App Extension** for Mac App Store distribution. Use a
+Packet Tunnel **System Extension** for a Developer ID build distributed outside
+the store. The rest of this section describes the System Extension setup, which
+is the configuration used by a notarized, directly distributed app.
+
+### 2. Configure both targets and identifiers
+
+In Xcode, give Runner and `VPNExtension` the same Development Team. Use a unique
+extension bundle identifier, for example `com.example.app.VPNExtension`, and
+pass that exact identifier as `providerBundleIdentifier` to `initialize()`.
+
+For a System Extension, check these target settings:
+
+- **Product Type** is System Extension and the built wrapper ends in
+  `.systemextension` (`WRAPPER_EXTENSION = systemextension`).
+- **Skip Install** is `YES`, **Hardened Runtime** is enabled, and the macOS
+  deployment target is no newer than Runner's deployment target.
+- Runner has a target dependency on `VPNExtension` and an **Embed System
+  Extensions** copy-files phase whose destination is
+  `Contents/Library/SystemExtensions`. Put that phase before Flutter's **Thin
+  Binary** and **Run Script** phases to avoid a dependency cycle.
+- Every Debug, Profile and Release configuration selects the intended signing
+  identity, provisioning profile and entitlements file. Do not leave Release
+  on an empty entitlements file unless a release pipeline deliberately stamps
+  those entitlements before signing.
+
+### 3. Add capabilities and provisioning
+
+Enable **App Groups**, **Network Extensions → Packet Tunnel**, and **System
+Extension** on Runner. Enable the matching App Group and Network Extension on
+`VPNExtension`. The resulting entitlements are conceptually:
+
+```xml
+<!-- Runner -->
+<key>com.apple.developer.networking.networkextension</key>
+<array><string>packet-tunnel-provider</string></array>
+<key>com.apple.developer.networking.vpn.api</key>
+<array><string>allow-vpn</string></array>
+<key>com.apple.developer.system-extension.install</key>
+<true/>
+<key>com.apple.security.application-groups</key>
+<array><string>$(TeamIdentifierPrefix)group.com.example.app</string></array>
+
+<!-- VPNExtension during development -->
+<key>com.apple.developer.networking.networkextension</key>
+<array><string>packet-tunnel-provider</string></array>
+<key>com.apple.security.application-groups</key>
+<array><string>$(TeamIdentifierPrefix)group.com.example.app</string></array>
+```
+
+The Developer ID provisioning profile for the provider uses
+`packet-tunnel-provider-systemextension`. The entitlements embedded in the
+signed app, extension and profiles must agree; inspect release artifacts with
+`codesign -d --entitlements :- <path>` and
+`security cms -D -i <profile>`.
+
+App Group identifiers are Team-ID-prefixed on macOS. Pass the resolved value,
+such as `ABCDE12345.group.com.example.app`, to `initialize(groupIdentifier:)`.
+Passing only `group.com.example.app` can put the app and provider in different
+containers, leaving shared logs and status empty.
+
+### 4. Configure the System Extension entry point and Info.plist
+
+The System Extension is a standalone executable. Add this `main.swift`:
+
+```swift
+import Foundation
+import NetworkExtension
+
+autoreleasepool {
+    NEProvider.startSystemExtensionMode()
+}
+
+CFRunLoopRun()
+```
+
+Use `CFRunLoopRun()`, not `dispatchMain()`. OpenVPNAdapter attaches its inbound
+packet socket to the main Core Foundation run loop; with `dispatchMain()` the
+tunnel can connect and send traffic while never receiving packets.
+
+The extension's `Info.plist` must use `SYSX` as `CFBundlePackageType`, include a
+user-facing `NSSystemExtensionUsageDescription`, and declare:
+
+```xml
+<key>NetworkExtension</key>
+<dict>
+  <key>NEMachServiceName</key>
+  <string>ABCDE12345.group.com.example.app.VPNExtension</string>
+  <key>NEProviderClasses</key>
+  <dict>
+    <key>com.apple.networkextension.packet-tunnel</key>
+    <string>$(PRODUCT_MODULE_NAME).PacketTunnelProvider</string>
+  </dict>
+</dict>
+```
+
+`NEMachServiceName` must contain the real Team ID in the final built plist and
+must match the value authorized by the signing profile. Write the Team ID out
+when an unsigned CI build is signed later: `$(TeamIdentifierPrefix)` is resolved
+while Xcode builds the plist and can become empty when no provisioning profile
+is present; signing afterwards does not reprocess the plist.
+
+### 5. Add OpenVPNAdapter to the provider target
+
+This plugin already ships a Flutter Swift Package at
+`darwin/openvpn_flutter/Package.swift`; Flutter consumes it for the Runner
+plugin. That package does not replace the VPN engine inside your separate
+provider target.
+
+Prefer Swift Package Manager for the provider: in Xcode select **File → Add
+Package Dependencies…**, add
+`https://github.com/ss-abramchuk/OpenVPNAdapter.git` at `0.8.0`, and attach the
+`OpenVPNAdapter` product to `VPNExtension` only.
+
+If using CocoaPods instead, keep `VPNExtension` as a top-level Podfile target.
+CocoaPods may not embed its frameworks into a System Extension automatically;
+add its generated framework embed script as the extension's final build phase:
+
+```sh
+"${PODS_ROOT}/Target Support Files/Pods-VPNExtension/Pods-VPNExtension-frameworks.sh"
+```
+
+### 6. Install and approve the extension
+
+Before creating or starting the VPN configuration, Runner must submit an
+`OSSystemExtensionRequest.activationRequest` for the provider bundle identifier.
+Keep its delegate alive until the request finishes. A request that needs user
+approval remains in flight even after the UI is updated, so prevent duplicate
+activation requests.
+
+System extensions are installed only from an application in `/Applications`.
+Copy the built app there and launch that copy; a build run from Flutter's build
+directory or a Gatekeeper-translocated location cannot be activated. The first
+activation requires approval in **System Settings → General → Login Items &
+Extensions → Network Extensions**. Re-submit activation after replacing the
+extension with a newer build.
+
+### 7. Sign and verify
+
+For Developer ID distribution, sign from the inside out: OpenVPNAdapter and
+other nested frameworks, `VPNExtension.systemextension` with its entitlements,
+then Runner. Do not use `codesign --deep`. Verify the finished app before
+notarization:
+
+```sh
+codesign --verify --deep --strict --verbose=2 YourApp.app
+spctl --assess --type execute --verbose=4 YourApp.app
+```
+
+A System Extension runs as root and may not see the same App Group container as
+Runner. Provider messages such as `OPENVPN_STATS` remain the reliable path for
+live status. Shared-file logs may be unavailable, and `lastError()` may then
+only report the error supplied by NetworkExtension on macOS 13 or later.
 
 ## Usage
 
