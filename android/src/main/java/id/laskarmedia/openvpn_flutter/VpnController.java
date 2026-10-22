@@ -42,8 +42,6 @@ import de.blinkt.openvpn.core.VpnStatus;
 final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCountListener, VpnStatus.LogListener {
     private static final String TAG = "OpenVPNFlutter";
 
-    /** How often an armed session timeout is checked while no traffic flows. */
-    private static final long EXPIRY_CHECK_INTERVAL_MS = 15_000;
     /** A stop requested before the engine is listening is retried this often... */
     private static final long STOP_RETRY_INTERVAL_MS = 500;
     /** ...for at most this long. */
@@ -59,13 +57,11 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
     static final class PendingPermission {
         @Nullable
         final VpnProfile profile;
-        final long expireAt;
         @NonNull
         final ResultCallback callback;
 
-        PendingPermission(@Nullable VpnProfile profile, long expireAt, @NonNull ResultCallback callback) {
+        PendingPermission(@Nullable VpnProfile profile, @NonNull ResultCallback callback) {
             this.profile = profile;
-            this.expireAt = expireAt;
             this.callback = callback;
         }
     }
@@ -81,6 +77,8 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<Listener> listeners = new CopyOnWriteArraySet<>();
+    /** Log lines older than this were replayed from a previous run's log cache. */
+    private final long createdAt = System.currentTimeMillis();
 
     private String stage = "disconnected";
     private long connectedSince;
@@ -97,9 +95,16 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
     private boolean connectionRequested;
     /** The current connection is being stopped on purpose (disconnect, timeout). */
     private boolean stopRequested;
+    /** The server rejected the credentials; the exit that follows is no crash. */
+    private boolean authFailed;
+    /**
+     * Set by start() until the new session reports its first state, so that the
+     * end of a connection that was still stopping is not taken for the new one.
+     */
+    private boolean awaitingNewSession;
+    /** Incremented by start(), so that a stop still on its way skips the new session. */
+    private int session;
 
-    private long expireAt;
-    private final Runnable expiryCheck = this::checkExpiry;
     private int stopRetriesLeft;
     private final Runnable stopRetry = this::retryStop;
 
@@ -173,27 +178,45 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
 
     // region Connect / disconnect
 
-    /** Starts the VPN service with [profile]. The VPN permission must already be granted. */
-    void start(@NonNull VpnProfile profile, long expireAt) {
+    /**
+     * Starts the VPN service with [profile]. The VPN permission must already be
+     * granted. The engine enforces [VpnProfile#mExpireAt] itself.
+     */
+    void start(@NonNull VpnProfile profile) {
         main.removeCallbacks(stopRetry);
         lastError = null;
         lastExitReason = null;
         stopRequested = false;
+        authFailed = false;
         connectionRequested = true;
         // A new session (possibly replacing a running one, which the engine handles).
+        session++;
+        awaitingNewSession = true;
         connectedSince = 0;
         bytesIn = 0;
         bytesOut = 0;
         speedIn = 0;
         speedOut = 0;
         ProfileManager.setTemporaryProfile(context, profile);
-        VPNLaunchHelper.startOpenVpn(profile, context);
-        armExpiry(expireAt);
+        try {
+            VPNLaunchHelper.startOpenVpn(profile, context);
+        } catch (RuntimeException e) {
+            // The service could not start (for example a background start restriction).
+            connectionRequested = false;
+            awaitingNewSession = false;
+            throw e;
+        }
     }
 
     /** Stops the VPN if one is running or starting. Safe to call at any time. */
     void stop() {
-        disarmExpiry();
+        PendingPermission pending = pendingPermission;
+        if (pending != null && pending.profile != null) {
+            // Still waiting for the VPN dialog: the connection must not start afterwards.
+            pendingPermission = null;
+            emitStage("disconnected");
+            pending.callback.success(false);
+        }
         if (!isActive()) {
             connectionRequested = false;
             return;
@@ -210,11 +233,17 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
      * engine may not listen yet; the stop is then retried until it does.
      */
     private void requestServiceStop() {
+        final int stoppedSession = session;
         Intent intent = new Intent(context, OpenVPNService.class);
         intent.setAction(OpenVPNService.START_SERVICE);
         ServiceConnection connection = new ServiceConnection() {
             @Override
             public void onServiceConnected(ComponentName name, IBinder binder) {
+                if (!stopRequested || stoppedSession != session) {
+                    // connect() was called meanwhile: leave the new session alone.
+                    safeUnbind(this);
+                    return;
+                }
                 boolean stopped = false;
                 if (binder instanceof OpenVPNService.LocalBinder) {
                     try {
@@ -317,49 +346,14 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
             return true;
         }
         try {
-            start(pending.profile, pending.expireAt);
+            start(pending.profile);
             pending.callback.success(true);
         } catch (RuntimeException e) {
             Log.e(TAG, "Could not start the VPN service", e);
-            connectionRequested = false;
+            emitStage("disconnected");
             pending.callback.error("start_failed", e.getMessage());
         }
         return true;
-    }
-
-    // endregion
-
-    // region Session timeout
-
-    private void armExpiry(long expireAt) {
-        disarmExpiry();
-        this.expireAt = expireAt;
-        if (expireAt > 0) {
-            main.post(expiryCheck);
-        }
-    }
-
-    private void disarmExpiry() {
-        expireAt = 0;
-        main.removeCallbacks(expiryCheck);
-    }
-
-    /**
-     * Uses the wall clock, which keeps counting while the device sleeps;
-     * handler delays alone would not.
-     */
-    private void checkExpiry() {
-        main.removeCallbacks(expiryCheck);
-        if (expireAt <= 0) {
-            return;
-        }
-        long remaining = expireAt - System.currentTimeMillis();
-        if (remaining <= 0) {
-            VpnStatus.logInfo("Session expired, disconnecting");
-            stop();
-            return;
-        }
-        main.postDelayed(expiryCheck, Math.min(remaining, EXPIRY_CHECK_INTERVAL_MS));
     }
 
     // endregion
@@ -382,14 +376,15 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
             bytesOut = out;
             speedIn = Math.max(0, diffIn / OpenVPNManagement.mBytecountInterval);
             speedOut = Math.max(0, diffOut / OpenVPNManagement.mBytecountInterval);
-            if (expireAt > 0 && System.currentTimeMillis() >= expireAt) {
-                checkExpiry();
-            }
         });
     }
 
     @Override
     public void newLog(LogItem logItem) {
+        // The log cache of the previous run is replayed through the listeners.
+        if (logItem.getLogtime() < createdAt) {
+            return;
+        }
         Map<String, Object> log = toMap(logItem);
         main.post(() -> {
             if (logItem.getLogLevel() == VpnStatus.LogLevel.ERROR) {
@@ -405,20 +400,32 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
 
     private void onState(String state, String message, ConnectionStatus level) {
         String mapped = mapState(state, level);
+        if (awaitingNewSession) {
+            if ("disconnected".equals(mapped) || "exiting".equals(mapped)) {
+                // The previous connection finishing; the new one has not reported yet.
+                return;
+            }
+            awaitingNewSession = false;
+        }
         switch (mapped) {
             case "connected":
                 if (connectedSince == 0) {
                     connectedSince = System.currentTimeMillis();
                 }
                 break;
+            case "auth_failed":
+                authFailed = true;
+                lastError = message == null || message.trim().isEmpty()
+                        ? "Authentication failed"
+                        : "Authentication failed: " + message;
+                break;
             case "exiting":
                 lastExitReason = message;
                 break;
             case "disconnected":
-                boolean intended = stopRequested || isSignalExit(lastExitReason);
+                boolean intended = stopRequested || authFailed || isSignalExit(lastExitReason);
                 boolean failed = connectionRequested && !intended
-                        && !"auth_failed".equals(stage) && !"denied".equals(stage)
-                        && !"disconnected".equals(stage);
+                        && !"denied".equals(stage) && !"disconnected".equals(stage);
                 if (failed) {
                     if (lastError == null) {
                         lastError = "The OpenVPN process stopped unexpectedly";
@@ -442,8 +449,8 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
         speedOut = 0;
         connectionRequested = false;
         stopRequested = false;
+        authFailed = false;
         lastExitReason = null;
-        disarmExpiry();
     }
 
     private void emitStage(String newStage) {
@@ -456,7 +463,11 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
         }
     }
 
-    /** OpenVPN reports the signal that ended it; SIGINT/SIGTERM mean someone stopped it. */
+    /**
+     * The engine reports EXITING "SIGINT" when it is stopped on purpose (the app,
+     * the notification, the system settings, a session timeout); OpenVPN itself
+     * reports the signal that ended it.
+     */
     private static boolean isSignalExit(@Nullable String reason) {
         if (reason == null) {
             return false;
@@ -479,6 +490,7 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
             case "CONNECTING":
                 return "connecting";
             case "WAIT":
+            case "WAIT_ORBOT":
                 return "wait_connection";
             case "AUTH":
                 return "authenticating";
@@ -489,6 +501,7 @@ final class VpnController implements VpnStatus.StateListener, VpnStatus.ByteCoun
             case "ADD_ROUTES":
                 return "add_routes";
             case "RECONNECTING":
+            case "CONNECTRETRY":
                 return "reconnect";
             case "RESOLVE":
                 return "resolve";

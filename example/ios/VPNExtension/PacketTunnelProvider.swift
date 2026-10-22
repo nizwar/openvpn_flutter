@@ -35,6 +35,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private var groupIdentifier: String?
     private var connectedOn: Date?
+    private var expireAt: Date?
     private var expiryTimer: DispatchSourceTimer?
     private let log = SharedLog()
 
@@ -138,16 +139,33 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     private func scheduleExpiry(millisecondsSince1970: Double?) {
         expiryTimer?.cancel()
         expiryTimer = nil
+        expireAt = nil
         guard let milliseconds = millisecondsSince1970, milliseconds > 0 else { return }
-        let delay = max(0, milliseconds / 1000 - Date().timeIntervalSince1970)
+        let end = Date(timeIntervalSince1970: milliseconds / 1000)
+        expireAt = end
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + delay)
+        // Wall clock: keeps counting while the device sleeps.
+        timer.schedule(wallDeadline: .now() + max(0, end.timeIntervalSinceNow))
         timer.setEventHandler { [weak self] in
-            self?.log.write("info", "Session expired, disconnecting")
-            self?.cancelTunnelWithError(nil)
+            self?.endExpiredSession()
         }
         timer.resume()
         expiryTimer = timer
+    }
+
+    private func endExpiredSession() {
+        guard let end = expireAt, end.timeIntervalSinceNow <= 0 else { return }
+        expireAt = nil
+        expiryTimer?.cancel()
+        expiryTimer = nil
+        log.write("info", "Session expired, disconnecting")
+        cancelTunnelWithError(nil)
+    }
+
+    override func wake() {
+        super.wake()
+        // The timer may not have fired while the device slept.
+        endExpiredSession()
     }
 
     private func fail(_ error: Error, _ completionHandler: (Error?) -> Void) {
@@ -221,12 +239,21 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
             self.startHandler = nil
         case .disconnected:
             connectedOn = nil
-            guard let stopHandler = stopHandler else { return }
             if vpnReachability.isTracking {
                 vpnReachability.stopTracking()
             }
-            stopHandler()
-            self.stopHandler = nil
+            if let stopHandler = stopHandler {
+                stopHandler()
+                self.stopHandler = nil
+            } else if let startHandler = startHandler {
+                let error = Self.error("The connection was closed before it was established.")
+                setLastError(error.localizedDescription)
+                startHandler(error)
+                self.startHandler = nil
+            } else {
+                // Closed by the server: end the tunnel so the system shows it.
+                cancelTunnelWithError(nil)
+            }
         case .reconnecting:
             reasserting = true
         default:
@@ -276,7 +303,11 @@ private final class SharedLog {
             let directory = container.appendingPathComponent("openvpn_flutter", isDirectory: true)
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = directory.appendingPathComponent("vpn.log")
-            FileManager.default.createFile(atPath: file.path, contents: nil)
+            // A new file per connection, starting with a header line that tells
+            // the app a new log began.
+            let time = Int64(Date().timeIntervalSince1970 * 1000)
+            FileManager.default.createFile(
+                atPath: file.path, contents: Data("\(time)\tinfo\tOpenVPN session started\n".utf8))
             url = file
         }
     }

@@ -162,9 +162,15 @@ final class VPNController {
     private var reachedConnected = false
     private var lastErrorMessage: String?
     private var expiryTimer: Timer?
+    /// Incremented by connect() and disconnect(): work that finishes later
+    /// (saving the configuration, fetching the last error) checks it is current.
+    private var generation = 0
+    /// The provider's last answer to OPENVPN_STATS, used when it answers late.
+    private var lastStatusReply: [String: Any]?
 
     private var logTimer: Timer?
     private var logOffset: UInt64 = 0
+    private var logHeader: Data?
 
     deinit {
         if let statusObserver = statusObserver {
@@ -240,9 +246,12 @@ final class VPNController {
                                     details: nil))
             return
         }
+        generation += 1
+        let attempt = generation
         let start = {
-            self.save(manager: manager, config: config, name: name, username: username, password: password,
-                      privateKeyPassword: privateKeyPassword, expireAt: expireAt, completion: completion)
+            self.save(manager: manager, attempt: attempt, config: config, name: name, username: username,
+                      password: password, privateKeyPassword: privateKeyPassword, expireAt: expireAt,
+                      completion: completion)
         }
         if Self.isActive(manager.connection.status) {
             // Switching servers: the configuration cannot change under a running tunnel.
@@ -254,8 +263,8 @@ final class VPNController {
         }
     }
 
-    private func save(manager: NETunnelProviderManager, config: String, name: String?, username: String?,
-                      password: String?, privateKeyPassword: String?, expireAt: Double?,
+    private func save(manager: NETunnelProviderManager, attempt: Int, config: String, name: String?,
+                      username: String?, password: String?, privateKeyPassword: String?, expireAt: Double?,
                       completion: @escaping FlutterResult) {
         let tunnel = NETunnelProviderProtocol()
         tunnel.providerBundleIdentifier = providerBundleIdentifier
@@ -302,6 +311,11 @@ final class VPNController {
                             completion(Self.flutterError("load_failed", error))
                             return
                         }
+                        guard attempt == self.generation else {
+                            // disconnect() was called while the configuration was saved.
+                            completion(false)
+                            return
+                        }
                         self.start(manager: manager, username: username, password: password,
                                    privateKeyPassword: privateKeyPassword, expireAt: expireAt,
                                    completion: completion)
@@ -325,6 +339,7 @@ final class VPNController {
         stopRequested = false
         reachedConnected = false
         lastErrorMessage = nil
+        lastStatusReply = nil
         if let group = groupIdentifier {
             UserDefaults(suiteName: group)?.removeObject(forKey: Shared.lastErrorKey)
         }
@@ -340,6 +355,7 @@ final class VPNController {
     }
 
     func disconnect() {
+        generation += 1
         expiryTimer?.invalidate()
         expiryTimer = nil
         guard let manager = manager, Self.isActive(manager.connection.status) else {
@@ -408,8 +424,11 @@ final class VPNController {
             return
         }
         if #available(iOS 16.0, macOS 13.0, *), let connection = manager?.connection {
+            let current = generation
             connection.fetchLastDisconnectError { error in
                 DispatchQueue.main.async {
+                    // A new connection started meanwhile: its stages win.
+                    guard current == self.generation else { return }
                     if let error = error {
                         self.lastErrorMessage = self.providerError() ?? error.localizedDescription
                         self.emit("error")
@@ -453,18 +472,20 @@ final class VPNController {
             try session.sendProviderMessage(Data("OPENVPN_STATS".utf8)) { response in
                 if let response = response,
                    let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any] {
+                    DispatchQueue.main.async { self.lastStatusReply = json }
                     answer(json)
                 } else {
                     answer(self.legacyStatus())
                 }
             }
         } catch {
-            answer(legacyStatus())
+            answer(lastStatusReply ?? legacyStatus())
             return
         }
-        // 1.x providers write the counters to the App Group and never answer.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            answer(self.legacyStatus())
+        // 1.x providers write the counters to the App Group and never answer;
+        // a busy provider gets the previous answer reused instead of a blank status.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            answer(self.lastStatusReply ?? self.legacyStatus())
         }
     }
 
@@ -513,6 +534,7 @@ final class VPNController {
     func startFollowingLogs(_ onLog: @escaping ([String: Any]) -> Void) {
         stopFollowingLogs()
         logOffset = currentLogSize()
+        logHeader = currentLogHeader()
         logTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             for log in self.readNewLogs() { onLog(log) }
@@ -530,12 +552,27 @@ final class VPNController {
         return handle.seekToEndOfFile()
     }
 
+    /// The first line of the log file. The provider starts every connection
+    /// with a new file and a header line holding its start time.
+    private func currentLogHeader() -> Data? {
+        guard let file = logFile, let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { handle.closeFile() }
+        let start = handle.readData(ofLength: 128)
+        guard let newline = start.firstIndex(of: UInt8(ascii: "\n")) else { return nil }
+        return start.prefix(upTo: newline)
+    }
+
     private func readNewLogs() -> [[String: Any]] {
+        let header = currentLogHeader()
+        if header != logHeader {
+            // A new connection started a new log.
+            logHeader = header
+            logOffset = 0
+        }
         guard let file = logFile, let handle = try? FileHandle(forReadingFrom: file) else { return [] }
         defer { handle.closeFile() }
         let size = handle.seekToEndOfFile()
         if size < logOffset {
-            // The provider started a new log (new connection).
             logOffset = 0
         }
         guard size > logOffset else { return [] }
@@ -590,12 +627,12 @@ final class VPNController {
         return nil
     }
 
-    /// The user tapped "Don't Allow" on the "Add VPN Configurations" prompt.
+    /// The user tapped "Don't Allow" on the "Add VPN Configurations" prompt
+    /// ("permission denied", whatever the language of the message).
     static func isPermissionDenied(_ error: Error) -> Bool {
         let error = error as NSError
         return error.domain == NEVPNErrorDomain
             && error.code == NEVPNError.Code.configurationReadWriteFailed.rawValue
-            && error.localizedDescription.lowercased().contains("permission denied")
     }
 
     static func flutterError(_ code: String, _ error: Error) -> FlutterError {

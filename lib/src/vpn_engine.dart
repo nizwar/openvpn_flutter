@@ -24,6 +24,15 @@ class OpenVPN {
   static const EventChannel _logChannel =
       EventChannel("id.laskarmedia.openvpn_flutter/vpnlog");
 
+  // An event channel has a single listener on the native side: every
+  // instance and listener shares one subscription to each channel.
+  static final Stream<dynamic> _stageEvents =
+      _stageChannel.receiveBroadcastStream();
+  static final Stream<VpnLog> _logEvents = _logChannel
+      .receiveBroadcastStream()
+      .where((event) => event is Map)
+      .map((event) => VpnLog.fromMap(event as Map<Object?, Object?>));
+
   /// How often [onVpnStatusChanged] and [statusStream] are updated while
   /// connected.
   static const Duration statusInterval = Duration(seconds: 1);
@@ -44,6 +53,7 @@ class OpenVPN {
   OpenVPN({this.onVpnStatusChanged, this.onVpnStageChanged});
 
   bool _initialized = false;
+  bool _disposed = false;
 
   /// Whether [initialize] completed.
   bool get initialized => _initialized;
@@ -76,10 +86,7 @@ class OpenVPN {
   ///
   /// On iOS and macOS the log comes from the packet tunnel provider; see the
   /// README for the provider code that forwards it.
-  Stream<VpnLog> get logStream => _logChannel
-      .receiveBroadcastStream()
-      .where((event) => event is Map)
-      .map((event) => VpnLog.fromMap(event as Map<Object?, Object?>));
+  Stream<VpnLog> get logStream => _logEvents;
 
   static bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -133,10 +140,12 @@ class OpenVPN {
       if (disconnectOnTaskRemoved != null)
         "disconnect_on_task_removed": disconnectOnTaskRemoved,
     });
+    if (_disposed) return;
     _initialized = true;
     _onStage(raw);
 
     final status = await this.status();
+    if (_disposed) return;
     lastStatus?.call(status);
     lastStage?.call(_stage);
   }
@@ -156,8 +165,10 @@ class OpenVPN {
   ///   iOS/macOS this needs the packet tunnel provider from the README).
   ///
   /// Returns `true` once the connection is starting; follow [stageStream] or
-  /// [onVpnStageChanged] for its progress. Returns `false` when the user
-  /// refuses the VPN permission (the stage becomes [VPNStage.denied]).
+  /// [onVpnStageChanged] for its progress. Returns `false` when it does not
+  /// start: the user refused the VPN permission (the stage becomes
+  /// [VPNStage.denied]), or [disconnect] was called while it was waiting for
+  /// that answer.
   /// Throws a [PlatformException] when the configuration is invalid or the VPN
   /// cannot be started.
   Future<bool> connect(
@@ -287,6 +298,7 @@ class OpenVPN {
   /// Stops listening to the native side. The VPN itself keeps its state;
   /// create a new [OpenVPN] to use it again.
   void dispose() {
+    _disposed = true;
     _statusTimer?.cancel();
     _statusTimer = null;
     _stageSubscription?.cancel();
@@ -339,8 +351,7 @@ class OpenVPN {
   }
 
   void _listenToStages() {
-    _stageSubscription ??= _stageChannel
-        .receiveBroadcastStream()
+    _stageSubscription ??= _stageEvents
         .listen((event) => _onStage(event is String ? event : null),
             onError: (Object error) {
       debugPrint("openvpn_flutter: stage stream error: $error");
@@ -348,6 +359,7 @@ class OpenVPN {
   }
 
   void _onStage(String? raw) {
+    if (_disposed) return;
     final stage = VPNStage.fromRaw(raw);
     _stage = stage;
     // The first stage is always reported, then only changes.
@@ -364,7 +376,7 @@ class OpenVPN {
   }
 
   void _startStatusTimer() {
-    if (_statusTimer != null) return;
+    if (_statusTimer != null || _disposed) return;
     _statusTimer = Timer.periodic(statusInterval, (_) => _refreshStatus());
     _refreshStatus();
   }
@@ -382,7 +394,7 @@ class OpenVPN {
   Future<void> _refreshStatus() async {
     try {
       final status = _withSpeed(await _fetchStatus());
-      if (_statusTimer == null) return;
+      if (_statusTimer == null || _disposed) return;
       _emitStatus(status);
     } on PlatformException catch (e) {
       debugPrint("openvpn_flutter: status failed: ${e.message}");
@@ -392,6 +404,7 @@ class OpenVPN {
   }
 
   void _emitStatus(VpnStatus status) {
+    if (_disposed) return;
     _status = status;
     onVpnStatusChanged?.call(status);
     if (!_statusController.isClosed) _statusController.add(status);

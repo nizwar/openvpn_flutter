@@ -266,6 +266,8 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
             result.error("invalid_argument", "expireAt is in the past", null);
             return;
         }
+        // The VPN service ends the session itself, also after a restart by the system.
+        profile.mExpireAt = expireAt;
 
         VpnController.ResultCallback callback = new VpnController.ResultCallback() {
             @Override
@@ -282,7 +284,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
         Intent permission = VpnService.prepare(context);
         if (permission == null) {
             try {
-                controller.start(profile, expireAt);
+                controller.start(profile);
                 callback.success(true);
             } catch (RuntimeException e) {
                 Log.e(TAG, "Could not start the VPN service", e);
@@ -299,7 +301,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
                     null);
             return;
         }
-        controller.setPendingPermission(new VpnController.PendingPermission(profile, expireAt, callback));
+        controller.setPendingPermission(new VpnController.PendingPermission(profile, callback));
         controller.markWaitingForPermission();
         try {
             activity.startActivityForResult(permission, VPN_PERMISSION_REQUEST_CODE);
@@ -320,7 +322,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
             result.success(false);
             return;
         }
-        controller.setPendingPermission(new VpnController.PendingPermission(null, 0, new VpnController.ResultCallback() {
+        controller.setPendingPermission(new VpnController.PendingPermission(null, new VpnController.ResultCallback() {
             @Override
             public void success(boolean granted) {
                 result.success(granted);
@@ -339,24 +341,25 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Metho
     }
 
     /**
-     * OpenVPN runs as its own process from libovpnexec.so (Android 9+), which only
-     * exists on disk when the app's native libraries are extracted on install.
-     * AGP stores them uncompressed instead unless the app opts out, and the
-     * engine would then exit right away ("OpenVPN process exited").
+     * OpenVPN runs as its own process (libovpnexec.so on Android 9+, a copy of the
+     * binary from the assets before) that loads libopenvpn.so from the app's
+     * native library directory. Both only exist on disk when native libraries
+     * are extracted on install; AGP stores them uncompressed instead unless the
+     * app opts out, and the engine would then exit right away ("OpenVPN process
+     * exited").
      *
      * @return why the engine cannot start, or null when it can.
      */
     @Nullable
     private String checkEngineInstalled() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            // Older versions run a copy of the binary from the app's assets.
+        File libraries = new File(context.getApplicationInfo().nativeLibraryDir);
+        boolean installed = new File(libraries, "libopenvpn.so").exists()
+                && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P
+                || new File(libraries, "libovpnexec.so").exists());
+        if (installed) {
             return null;
         }
-        File executable = new File(context.getApplicationInfo().nativeLibraryDir, "libovpnexec.so");
-        if (executable.exists()) {
-            return null;
-        }
-        return "The OpenVPN engine (libovpnexec.so) is not installed in " + executable.getParent() + ". "
+        return "The OpenVPN engine is not installed in " + libraries + ". "
                 + "Add `packaging { jniLibs { useLegacyPackaging = true } }` to the android block of "
                 + "android/app/build.gradle(.kts) so native libraries are extracted, and make sure the app "
                 + "includes the device's ABI (" + Build.SUPPORTED_ABIS[0] + ").";

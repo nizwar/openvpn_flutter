@@ -28,11 +28,18 @@ implementation and a reworked Dart API. See "Migrating from 1.x" in the README.
   (#71, #140). The notification and the system VPN settings open the app.
 * `allowedPackages`: only the listed apps use the VPN (#22, #134).
 * `privateKeyPassword` for encrypted private keys (#111, #124).
-* `expireAt`: disconnect at a given time, even with the app closed (#18, #112).
+* `expireAt`: disconnect at a given time, even with the app closed and after
+  the system restarts the VPN service (#18, #112).
 * `disconnectOnTaskRemoved`: stop the VPN when the app is swiped away (#59).
 * `openVpnSettings()`: the system screen for always-on VPN and "Block
   connections without VPN" (#77).
-* Graceful disconnect that never throws, also right after `connect()`.
+* Graceful disconnect that never throws, also right after `connect()`, and it
+  cancels a connection still waiting for the permission dialog.
+* Stopping the VPN from the notification, the system settings or by swiping
+  the app away reports `disconnected`, not `error`; a rejected login reports
+  `auth_failed` with its reason.
+* Fix a crash when `allowedPackages`/`bypassPackages` name an app that is not
+  installed.
 * The engine's activities are no longer exported to other apps; R8 rules keep
   the engine intact in minified builds.
 * Builds with Android Gradle Plugin 8 and 9; minimum SDK 21.

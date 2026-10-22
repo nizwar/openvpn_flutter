@@ -96,6 +96,7 @@ void main() {
 
     test('knows the names engines report', () {
       expect(VPNStage.fromRaw('reasserting'), VPNStage.reconnect);
+      expect(VPNStage.fromRaw('connectretry'), VPNStage.reconnect);
       expect(VPNStage.fromRaw('no_connection'), VPNStage.no_network);
       expect(VPNStage.fromRaw('screenoff'), VPNStage.paused);
       expect(VPNStage.fromRaw('auth'), VPNStage.authenticating);
@@ -462,6 +463,41 @@ void main() {
       await pumpEventQueue();
       expect(streamed.single.message, 'hi');
       await subscription.cancel();
+    });
+
+    test('instances share the native event streams', () async {
+      await initialize();
+      final other = OpenVPN();
+      await other.initialize(
+        groupIdentifier: 'group.test',
+        providerBundleIdentifier: 'test.extension',
+        localizedDescription: 'Test',
+      );
+      final first = <VPNStage>[];
+      final second = <VPNStage>[];
+      vpn.stageStream.listen(first.add);
+      other.stageStream.listen(second.add);
+      platform.emitStage('connecting');
+      await pumpEventQueue();
+      expect(first, [VPNStage.connecting]);
+      expect(second, [VPNStage.connecting]);
+
+      // Disposing one instance must not cut the other off.
+      other.dispose();
+      platform.emitStage('connected');
+      await pumpEventQueue();
+      expect(first, [VPNStage.connecting, VPNStage.connected]);
+    });
+
+    test('dispose during initialize leaves nothing running', () async {
+      platform.stage = 'connected';
+      platform.status = {'connected_on': 1000, 'byte_in': 1};
+      final initializing = initialize();
+      vpn.dispose();
+      await initializing;
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      expect(vpn.initialized, isFalse);
+      expect(platform.calls.where((call) => call.method == 'status'), isEmpty);
     });
 
     test('Android-only helpers', () async {

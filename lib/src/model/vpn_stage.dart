@@ -127,6 +127,8 @@ enum VPNStage {
     'connecting': connecting,
     'reasserting': reconnect,
     'reconnecting': reconnect,
+    'connectretry': reconnect,
+    'wait_orbot': wait_connection,
     'wait': wait_connection,
     'auth': authenticating,
     'no_connection': no_network,

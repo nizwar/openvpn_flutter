@@ -253,6 +253,9 @@ provider is packaged:
   OpenVPNAdapter.
 - Sign inside out: the framework, the extension with its entitlements, then the
   app (no `--deep`).
+- A System Extension runs as root and may not share the app's App Group
+  container: status still works (it is a message to the provider), but logs and
+  `lastError()` can then only come from the system (`lastError()` on macOS 13+).
 
 ## Usage
 
@@ -327,7 +330,8 @@ await openvpn.connect(
   'Japan #1',
   // Encrypted <key>:
   privateKeyPassword: 'key passphrase',
-  // Disconnect automatically, even with the app closed:
+  // Disconnect automatically, even with the app closed (Android enforces it in
+  // the VPN service, iOS/macOS in the packet tunnel provider):
   expireAt: DateTime.now().add(const Duration(hours: 1)),
   // Android: only these apps use the VPN...
   allowedPackages: ['com.android.chrome'],
