@@ -252,7 +252,9 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
                 self.startHandler = nil
             } else {
                 // Closed by the server: end the tunnel so the system shows it.
-                cancelTunnelWithError(nil)
+                let error = Self.error("The server closed the connection.")
+                setLastError(error.localizedDescription)
+                cancelTunnelWithError(error)
             }
         case .reconnecting:
             reasserting = true
@@ -262,6 +264,11 @@ extension PacketTunnelProvider: OpenVPNAdapterDelegate {
     }
 
     func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleError error: Error) {
+        guard stopHandler == nil else {
+            // Errors while the tunnel is being stopped are expected noise.
+            log.write("info", error.localizedDescription)
+            return
+        }
         log.write("error", error.localizedDescription)
         guard let fatal = (error as NSError).userInfo[OpenVPNAdapterErrorFatalKey] as? Bool, fatal else {
             return

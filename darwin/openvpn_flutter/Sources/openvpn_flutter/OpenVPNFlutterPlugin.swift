@@ -167,6 +167,9 @@ final class VPNController {
     private var generation = 0
     /// The provider's last answer to OPENVPN_STATS, used when it answers late.
     private var lastStatusReply: [String: Any]?
+    /// Waiting for the system's last disconnect error: repeated "disconnected"
+    /// notifications must not report the end twice.
+    private var finishing = false
 
     private var logTimer: Timer?
     private var logOffset: UInt64 = 0
@@ -395,7 +398,7 @@ final class VPNController {
     private func statusChanged() {
         guard let status = manager?.connection.status else { return }
         let newStage = Self.stageName(status)
-        if newStage == stage { return }
+        if newStage == stage || (finishing && newStage == "disconnected") { return }
         switch newStage {
         case "connected":
             reachedConnected = true
@@ -423,25 +426,33 @@ final class VPNController {
             emit("disconnected")
             return
         }
-        if #available(iOS 16.0, macOS 13.0, *), let connection = manager?.connection {
-            let current = generation
-            connection.fetchLastDisconnectError { error in
-                DispatchQueue.main.async {
-                    // A new connection started meanwhile: its stages win.
-                    guard current == self.generation else { return }
-                    if let error = error {
-                        self.lastErrorMessage = self.providerError() ?? error.localizedDescription
-                        self.emit("error")
-                    }
-                    self.emit("disconnected")
-                }
-            }
-        } else {
-            if !connected {
-                lastErrorMessage = providerError()
-                emit("error")
-            }
+        if !connected {
+            // The attempt failed. The system's last disconnect error is often not
+            // recorded yet at this point, so the provider's is preferred.
+            lastErrorMessage = providerError() ?? "The VPN stopped before it connected"
+            emit("error")
             emit("disconnected")
+            return
+        }
+        // It was connected: it failed if the system recorded an error (the
+        // provider ends the tunnel with one when the server closes it).
+        guard #available(iOS 16.0, macOS 13.0, *), let connection = manager?.connection else {
+            emit("disconnected")
+            return
+        }
+        finishing = true
+        let current = generation
+        connection.fetchLastDisconnectError { error in
+            DispatchQueue.main.async {
+                self.finishing = false
+                // A new connection started meanwhile: its stages win.
+                guard current == self.generation else { return }
+                if let error = error {
+                    self.lastErrorMessage = self.providerError() ?? error.localizedDescription
+                    self.emit("error")
+                }
+                self.emit("disconnected")
+            }
         }
     }
 
