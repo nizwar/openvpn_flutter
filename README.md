@@ -276,8 +276,6 @@ Extension** on Runner. Enable the matching App Group and Network Extension on
 <!-- Runner -->
 <key>com.apple.developer.networking.networkextension</key>
 <array><string>packet-tunnel-provider</string></array>
-<key>com.apple.developer.networking.vpn.api</key>
-<array><string>allow-vpn</string></array>
 <key>com.apple.developer.system-extension.install</key>
 <true/>
 <key>com.apple.security.application-groups</key>

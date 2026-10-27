@@ -1,3 +1,12 @@
+## 2.0.1
+
+Documentation only.
+
+* macOS: a complete guide to packaging the provider as a System Extension
+  (#152, thanks @kekko7072). Its `main.swift` has to run the main run loop with
+  `CFRunLoopRun()`: with `dispatchMain()`, as the 2.0.0 README said, the tunnel
+  connects but never receives packets.
+
 ## 2.0.0
 
 A major update: a new Android engine, macOS support, one shared iOS/macOS
