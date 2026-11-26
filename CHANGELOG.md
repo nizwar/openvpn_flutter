@@ -1,3 +1,13 @@
+## 2.0.2
+
+### Android
+* Fixed a crash while connected when the device's clock is set back during a
+  session (for example by an automatic network time correction): the
+  management thread threw `NumberFormatException: For input string: "0-17"`
+  in `OpenVPNService.updateByteCount` and took the app down with it
+  (nizwar/openvpn_library#5, thanks @7c). The engine is now
+  `openvpn_library` `b556517829`.
+
 ## 2.0.1
 
 Documentation only.
